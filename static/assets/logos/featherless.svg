@@ -1,0 +1,5 @@
+﻿<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>
+  <rect width='64' height='64' rx='10' ry='10' fill='#111'/>
+  <rect x='2' y='2' width='60' height='60' rx='8' ry='8' fill='none' stroke='#888'/>
+  <text x='32' y='36' font-family='Arial' font-size='10' text-anchor='middle' fill='#fff'>OPENAI</text>
+</svg>

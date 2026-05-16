@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FactLens Workflow Map</title>
+  <style>
+    :root { --bg:#000; --panel:#070707; --ink:#fff; --muted:#d0d0d0; --line:#2b2b2b; }
+    * { box-sizing:border-box; }
+    html,body { margin:0; width:100%; height:100%; background:#000; color:#fff; font-family:"Segoe UI",Arial,sans-serif; }
+    .app { width:100vw; height:100vh; display:grid; grid-template-columns:390px 1fr; overflow:hidden; }
+    .left { background:var(--panel); border-right:1px solid var(--line); overflow:auto; box-shadow: 0 0 36px rgba(68,150,255,.18), inset 0 0 24px rgba(68,150,255,.08); }
+    .sec { padding:14px; border-bottom:1px solid var(--line); }
+    .eyebrow { margin:0 0 8px; font:700 11px "Consolas",monospace; letter-spacing:.12em; text-transform:uppercase; }
+    h1{margin:0 0 8px;font-size:22px;} h2{margin:0 0 8px;font-size:16px;} p{margin:0;color:var(--muted);line-height:1.45;}
+    textarea{width:100%;min-height:96px;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:#000;color:#fff;padding:10px;font:13px/1.45 "Consolas",monospace;}
+    .row{margin-top:8px;display:flex;gap:8px;}
+    button{border:1px solid var(--line);border-radius:10px;background:#111;color:#fff;padding:10px 12px;font:700 12px "Consolas",monospace;text-transform:uppercase;cursor:pointer;}
+    .run{flex:1;background:#fff;color:#000;}
+    .kv{margin-top:8px;font:12px "Consolas",monospace;color:#ddd;}
+    .timeline{border:1px solid var(--line);border-radius:10px;background:#000;max-height:250px;overflow:auto;padding:8px;font:12px/1.45 "Consolas",monospace;}
+    .tag{display:inline-block;padding:2px 7px;border-radius:999px;border:1px solid #555;font-size:10px;color:#ddd;}
+    .tag.started{color:#8fd3ff;border-color:#2d5f7d;background:#07131c;}
+    .tag.running,.tag.file_extracted{color:#9ef5ff;border-color:#2f6f76;background:#061416;}
+    .tag.completed{color:#a8ffbe;border-color:#2e6a42;background:#08150d;}
+    .tag.ended,.tag.idle{color:#d9d9d9;border-color:#666;background:#111;}
+    .tag.retry,.tag.needs_live_evidence{color:#ffe1a7;border-color:#7f6534;background:#1a1408;}
+    .tag.failed,.tag.file_warning{color:#ffb6b6;border-color:#7a3c3c;background:#170909;}
+    .canvas{position:relative;overflow:hidden;cursor:grab;background:linear-gradient(#111 1px,transparent 1px),linear-gradient(90deg,#111 1px,transparent 1px),#000;background-size:44px 44px; box-shadow: inset 0 0 60px rgba(76, 155, 255, .10);}
+    #world{position:absolute;left:0;top:0;width:14600px;height:7600px;transform-origin:0 0;}
+    #edges{position:absolute;inset:0;width:14600px;height:7600px;pointer-events:none;}
+    .edge{fill:none;stroke:#1b1b1b;stroke-width:4.2;marker-end:url(#arrowHead);opacity:.04;}
+    .edge.stage-input{stroke:#6ea8ff;}
+    .edge.stage-retrieval{stroke:#68d9b3;}
+    .edge.stage-reason{stroke:#f2c66d;}
+    .edge.stage-decision{stroke:#d2a8ff;}
+    .edge.stage-rag-cache{stroke:#48e6ff;}
+    .edge.stage-rag-similar{stroke:#8afc8a;}
+    .edge.stage-rag-store{stroke:#ffb85c;}
+    .edge.stage-rag-change{stroke:#ff6f91;}
+    .edge.stage-rag-trust{stroke:#c79cff;}
+    .edge.stage-sub{stroke:#9aa0aa;stroke-dasharray:8 7;}
+    .edge.stage-sub{marker-end:none;}
+    .edge.discovered{opacity:.92;stroke-width:4.8;filter:drop-shadow(0 0 5px rgba(180,220,255,.35));}
+    .edge.active{stroke:#fff;stroke-width:5.4;opacity:1;animation:pulse 1.1s ease-in-out infinite,flow 1.2s linear infinite;}
+    .edge.loop{stroke:#d6b06c;stroke-dasharray:10 8;}
+    .edge.loop.active{animation:flow 1s linear infinite;}
+    @keyframes pulse{0%{opacity:.35;}50%{opacity:1;}100%{opacity:.35;}}
+    @keyframes flow{from{stroke-dashoffset:0;}to{stroke-dashoffset:-30;}}
+    .node{position:absolute;width:880px;border:1px solid #3a3a3a;border-radius:16px;background:#070707;padding:22px;transition:border-color .2s ease, box-shadow .2s ease, opacity .22s ease, filter .22s ease;box-shadow:0 0 0 1px rgba(111,176,255,.10), 0 20px 34px rgba(76,155,255,.14), inset 0 0 18px rgba(76,155,255,.07);}
+    .node.sub{width:420px;background:#060606;opacity:.96;box-shadow:0 0 0 1px rgba(111,176,255,.08), 0 14px 24px rgba(76,155,255,.10), inset 0 0 12px rgba(76,155,255,.05);}
+    .node.undiscovered{opacity:.18;filter:saturate(.5) brightness(.65);}
+    .node.discovered{opacity:1;filter:none;}
+    .node.stage-input{background:linear-gradient(180deg,#07111b,#060606);border-color:#315b88;}
+    .node.stage-retrieval{background:linear-gradient(180deg,#071912,#060606);border-color:#2c7a5b;}
+    .node.stage-reason{background:linear-gradient(180deg,#1a1407,#060606);border-color:#8c6c32;}
+    .node.stage-decision{background:linear-gradient(180deg,#180a1d,#060606);border-color:#6d4d90;}
+    .node.active{border-color:#fff;}
+    .node.started{border-color:#4ea3d9;box-shadow:0 0 0 1px rgba(78,163,217,.2);}
+    .node.running,.node.file_extracted{border-color:#62d0dc;box-shadow:0 0 0 1px rgba(98,208,220,.2);}
+    .node.completed{border-color:#7ac18b;box-shadow:0 0 0 1px rgba(122,193,139,.2);}
+    .node.ended{border-color:#7b7b7b;}
+    .node.retry,.node.needs_live_evidence{border-color:#d5b985;box-shadow:0 0 0 1px rgba(213,185,133,.2);}
+    .node.failed,.node.file_warning{border-color:#d18c8c;box-shadow:0 0 0 1px rgba(209,140,140,.2);}
+    .node-head{display:flex;align-items:center;gap:14px;margin-bottom:10px;}
+    .n8n-logo{width:76px;height:76px;border-radius:12px;border:1px solid #3d3d3d;background:#0e0e0e;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+    .n8n-logo img{width:56px;height:56px;object-fit:contain;background:#fff;border-radius:6px;}
+    .node h3{margin:0;font-size:34px;} .node p{margin:0;color:#ddd;font-size:24px;min-height:72px;}
+    .node-logos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+    .mini-logo{width:64px;height:64px;border-radius:10px;border:1px solid #444;background:#111;padding:6px;object-fit:contain;}
+    .state{margin-top:12px;display:inline-block;border:1px solid #555;border-radius:999px;padding:8px 16px;font:700 18px "Consolas",monospace;text-transform:uppercase;color:#eaeaea;}
+    .nmeta{margin-top:10px;font:20px "Consolas",monospace;color:#bfbfbf;}
+    .stepmark{position:absolute;right:14px;top:10px;min-width:46px;height:46px;padding:0 12px;border-radius:999px;border:1px solid #8a8a8a;background:#000;color:#fff;font:800 19px "Consolas",monospace;display:flex;align-items:center;justify-content:center;opacity:1;box-shadow:0 0 12px rgba(255,255,255,.15);}
+    .steplist{margin-top:8px;font:13px "Consolas",monospace;color:#c0c0c0;min-height:16px;}
+    .nav{position:absolute;right:18px;bottom:18px;display:flex;gap:8px;z-index:5;}
+    .nav button{width:44px;height:44px;border-radius:999px;padding:0;font-size:18px;}
+    .viewport-nav{position:absolute;left:18px;bottom:18px;z-index:6;display:grid;grid-template-columns:44px 44px 44px;grid-template-rows:44px 44px 44px;gap:6px;}
+    .viewport-nav button{width:44px;height:44px;border-radius:10px;padding:0;font-size:16px;border:1px solid #444;background:#0b0b0b;color:#fff;cursor:pointer;}
+    .viewport-nav .zoomin{grid-column:1;grid-row:1;}
+    .viewport-nav .zoomout{grid-column:3;grid-row:1;}
+    .viewport-nav .up{grid-column:2;grid-row:1;}
+    .viewport-nav .left{grid-column:1;grid-row:2;}
+    .viewport-nav .home{grid-column:2;grid-row:2;}
+    .viewport-nav .right{grid-column:3;grid-row:2;}
+    .viewport-nav .down{grid-column:2;grid-row:3;}
+    .verdict{position:absolute;right:18px;bottom:74px;z-index:5;border:1px solid #444;border-radius:10px;padding:8px 10px;background:#050505;font:12px "Consolas",monospace;min-width:320px;box-shadow:0 0 20px rgba(118,187,255,.20), 0 12px 22px rgba(76,155,255,.16);}
+    .total{position:absolute;right:18px;top:18px;z-index:5;border:1px solid #444;border-radius:10px;padding:8px 10px;background:#050505;font:12px "Consolas",monospace;box-shadow:0 0 20px rgba(118,187,255,.20), 0 12px 22px rgba(76,155,255,.16);}
+    .mode{position:absolute;right:18px;top:66px;z-index:5;}
+    .hover-card{position:fixed;display:none;z-index:40;max-width:500px;background:#050505;border:1px solid #3b3b3b;border-radius:12px;padding:14px;box-shadow:0 0 26px rgba(118,187,255,.20), 0 12px 26px rgba(0,0,0,.45);}
+    .hover-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+    .hover-head .n8n-logo{width:34px;height:34px;}
+    .hover-card h3{margin:0;font-size:18px;} .hover-card p{margin:0 0 8px;color:#ddd;font-size:13px;line-height:1.45;}
+    .hover-sec{margin-bottom:8px;} .hover-sec h4{margin:0 0 4px;font:700 11px "Consolas",monospace;color:#f2f2f2;letter-spacing:.04em;text-transform:uppercase;}
+    .hover-list{margin:0;padding-left:18px;color:#d7d7d7;font-size:13px;line-height:1.45;}
+    .pill{display:inline-block;margin:2px 4px 0 0;padding:3px 8px;border-radius:999px;border:1px solid #555;font:12px "Consolas",monospace;color:#eee;background:#111;}
+    .logos{display:flex;flex-wrap:wrap;gap:8px;}
+    .logo{display:flex;align-items:center;justify-content:center;padding:4px;border:1px solid #444;border-radius:8px;background:#0d0d0d;}
+    .logo img{width:24px;height:24px;border-radius:3px;object-fit:contain;background:#fff;}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="left">
+      <section class="sec"><p class="eyebrow">Collaborative Systems</p><h1>FactLens Workflow Map</h1><p>Expanded mesh + local logos + detailed hover.</p></section>
+      <section class="sec"><h2>Run Claim</h2><textarea id="claim">India is the 4th largest economy in 2026</textarea><div class="row"><select id="inputKind" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="text">Text</option><option value="image">Image (OCR)</option><option value="pdf">PDF</option></select><input id="wfFile" type="file" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:8px;font:12px Consolas,monospace;"></div><div class="row"><select id="cacheMode" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="off">Cache: Off (no read/no write)</option><option value="read">Cache: Read only</option><option value="write">Cache: Write only</option><option value="read_write">Cache: Read + Write</option><option value="update">Cache: Update</option><option value="auto">Cache: Auto</option></select></div><div class="row" style="align-items:center;"><label style="font:12px Consolas,monospace;color:#ddd;display:flex;gap:8px;align-items:center;"><input type="checkbox" id="forceRecheck" /> Force live recheck (ignore cache hit)</label></div><div class="row"><button id="run" class="run">Run Workflow</button><button id="cancelRun">Cancel Analysis</button><button id="reset">Reset</button></div><div id="summary" class="kv">Status: idle</div><div id="formatSummary" class="kv">Evidence formats: canonical schema active (awaiting run).</div></section>
+      <section class="sec"><h2>Step Details</h2><div id="inspector" class="kv">Select node.</div></section>
+      <section class="sec"><h2>Workflow History</h2><div id="timeline" class="timeline">Waiting for run...</div></section>
+    </aside>
+    <section id="canvas" class="canvas">
+      <div id="world"><svg id="edges" viewBox="0 0 14600 7600"></svg></div>
+      <div id="totalTimer" class="total">Total: 00:00.0</div>
+      <div class="mode"><button id="fullBtn">Full Pipeline</button></div>
+      <div class="mode" style="top:114px;"><button id="devBtn">Dev: Off</button></div>
+      <div id="verdict" class="verdict">Verdict: waiting | Confidence: 0%</div>
+      <div class="nav"><button id="prevStep" title="Previous">&#8592;</button><button id="nextStep" title="Next">&#8594;</button></div>
+      <div class="viewport-nav">
+        <button class="zoomin" id="zoomIn" title="Zoom In">+</button>
+        <button class="zoomout" id="zoomOut" title="Zoom Out">-</button>
+        <button class="up" id="panUp" title="Pan Up">&#8593;</button>
+        <button class="left" id="panLeft" title="Pan Left">&#8592;</button>
+        <button class="home" id="panHome" title="Reset View">&#9679;</button>
+        <button class="right" id="panRight" title="Pan Right">&#8594;</button>
+        <button class="down" id="panDown" title="Pan Down">&#8595;</button>
+      </div>
+    </section>
+  </main>
+  <div id="devPanel" class="hover-card" style="display:none; right:16px; left:auto; top:160px; position:fixed; max-width:420px;">
+    <div class="hover-sec"><h4>Dev Layout</h4><p id="devInfo">Select a node, then use arrow keys.</p></div>
+    <div class="hover-sec">
+      <button id="copyCoords">Copy Current Mode Coords</button>
+      <button id="saveCoords" style="margin-left:8px;">Save Layout File</button>
+    </div>
+  </div>
+  <div id="hoverCard" class="hover-card"></div>
+  <script>
+    const LOGO = (n) => `/assets/logos/${n}`;
+    const AGENT_INFO = {
+      "System": { role:"Orchestrator + run lifecycle", explain:"Controls execution timeline and event stream.", rules:["Ordered events","One bounded retry","No fabricated verdict"], apis:["FastAPI","Python runtime","Run Store"], outputs:["run_id","events","status"], logos:[["FastAPI",LOGO("fastapi.svg")],["Python",LOGO("python.svg")]] },
+      "Intake Agent": { role:"Claim extraction", explain:"Builds one checkable claim from input text/file.", rules:["Normalize text","Checkability gate","No ambiguity carry"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["claim","checkable","topic"], logos:[["Gemini",LOGO("gemini.svg")],["Google",LOGO("google.svg")]] },
+      "Domain Router Agent": { role:"Route selection", explain:"Chooses domain-aware retrieval route.", rules:["Semantic route","No verdict logic"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["domain route","claim mode"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "Web Research Agent": { role:"Broad web retrieval", explain:"Finds contextual evidence from web index providers.", rules:["Cited URL only","Blacklist filter"], apis:["Google CSE API","DuckDuckGo","Tavily (optional)"], outputs:["web evidence"], logos:[["Web",LOGO("search-logo.webp")],["Google",LOGO("google.svg")],["DuckDuckGo",LOGO("duckduckgo.svg")]] },
+      "Primary Source Agent": { role:"High-trust retrieval", explain:"Targets institutional/official sources.", rules:["Prefer gov/edu/org","Prioritize reference/trusted"], apis:["Google CSE API","World Bank"], outputs:["trusted evidence"], logos:[["Web",LOGO("search-logo.webp")],["Trusted",LOGO("worldbank.svg")],["Google",LOGO("google.svg")]] },
+      "Data Extractor Agent": { role:"Claim-driven extraction", explain:"Extracts comparable facts from API + pages and normalizes mixed records.", rules:["Preserve provenance","Extract structured fields","Normalize to canonical EvidenceItem"], apis:["World Bank API","Scraper"], outputs:["api_data/web_scrape evidence"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
+      "Tri Consistency Agent": { role:"Cross-channel consistency", explain:"Measures overlap among trio channels.", rules:["Penalty on drift","Emit consistency score"], apis:["Local scorer"], outputs:["consistency"], logos:[["Python",LOGO("python.svg")],["Python",LOGO("python.svg")]] },
+      "Evidence Aggregator Agent": { role:"Consistency-aware aggregation", explain:"Balanced merge across channels into one canonical evidence schema.", rules:["Channel caps","Diversity retention","Normalize mixed formats"], apis:["Local aggregator"], outputs:["raw evidence pool (canonical)"], logos:[["JSON",LOGO("json-logo.png")],["Table",LOGO("databricks.svg")],["Web",LOGO("search-logo.webp")]] },
+      "Skeptic Agent": { role:"Counter-checks", explain:"Challenges weak/contradictory evidence.", rules:["No assumption","Escalate uncertainty"], apis:["Featherless model (FEATHERLESS_MODEL)","Gemini fallback"], outputs:["objections"], logos:[["Featherless",LOGO("featherless.png")],["ChatGPT",LOGO("chatgpt-logo.webp")],["Gemini",LOGO("gemini.svg")]] },
+      "Source Quality Agent": { role:"Deterministic scoring", explain:"Applies relevance/credibility/recency/diversity rules.", rules:["Credibility x relevance x temporal","Domain cap + blacklist"], apis:["Rule engine"], outputs:["audited evidence pool"], logos:[["Python",LOGO("python.svg")],["Python",LOGO("python.svg")]] },
+      "Stat Comparator Agent": { role:"Evidence-vs-claim compare", explain:"Strict compare from provided evidence only.", rules:["No assumptions","JSON-only structured compare"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["comparator verdict"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "Consensus Moderator Agent": { role:"Final arbitration", explain:"Produces final verdict and confidence under guardrails.", rules:["Obey quality/comparator gates","Insufficient when uncertain"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["verdict","confidence","explanation"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "Cache Policy Node": { role:"Cache mode gate", explain:"Applies per-run cache mode: off/read/write/read_write/update/auto.", rules:["Read mode may return cached result","Write mode persists run/evidence only","Auto picks read/update/write"], apis:["CACHE_MODE override"], outputs:["cache decision"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
+      "Similar Claims Node": { role:"Similarity retrieval", explain:"Finds semantically similar past claims for retrieval bootstrap.", rules:["Token-overlap threshold","Top-K similar runs"], apis:["SQLite memory store"], outputs:["similar_claims"], logos:[["Search",LOGO("search-logo.webp")],["JSON",LOGO("json-logo.png")]] },
+      "Run Store Node": { role:"Structured run persistence", explain:"Stores run_id, session_id, timings, evidence, and events.", rules:["Append run history","Persist evidence metadata"], apis:["SQLite run store"], outputs:["runs/evidence/events rows"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
+      "Change Log Node": { role:"Drift changelog", explain:"Tracks what changed vs nearest historical claims and why.", rules:["Detect verdict drift","Track source-domain changes"], apis:["SQLite change_log"], outputs:["what_changed","why_changed"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
+      "Trust Stats Node": { role:"Trust calibration memory", explain:"Updates per-domain trust stats from each run.", rules:["Aggregate credibility stats","Persist root-domain trends"], apis:["SQLite trust_stats"], outputs:["domain trust updates"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
+      "Relevance Scorer": { role:"Sub-agent", explain:"Scores query-evidence semantic match.", rules:["Local deterministic score"], apis:["Rule engine"], outputs:["relevance"], logos:[["Python",LOGO("python.svg")]] },
+      "Temporal Scorer": { role:"Sub-agent", explain:"Applies age/recency weight.", rules:["Temporal weight policy"], apis:["Rule engine"], outputs:["temporal weight"], logos:[["Python",LOGO("python.svg")]] },
+      "Diversity Filter": { role:"Sub-agent", explain:"Penalizes source duplication and over-reliance.", rules:["Root domain cap"], apis:["Rule engine"], outputs:["diversity penalty"], logos:[["Python",LOGO("python.svg")]] },
+      "Query Planner": { role:"Sub-agent", explain:"Builds route-aware query variants.", rules:["No verdicting"], apis:["Gemini"], outputs:["query set"], logos:[["Python",LOGO("python.svg")]] },
+      "API Retriever": { role:"Sub-agent", explain:"Executes API retrieval path.", rules:["Preserve response provenance"], apis:["World Bank API"], outputs:["api rows"], logos:[["API",LOGO("api-logo.webp")]] },
+      "Scrape Retriever": { role:"Sub-agent", explain:"Executes deep scrape path.", rules:["Text extract + sanitize"], apis:["Scraper"], outputs:["scraped snippets"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
+      "Text Input Node": { role:"Input Sub-agent", explain:"Handles plain text claims.", rules:["Normalize text input","Strip noise"], apis:["FastAPI form"], outputs:["text payload"], logos:[["Python",LOGO("python.svg")]] },
+      "Image OCR Node": { role:"Input Sub-agent", explain:"Extracts text from images.", rules:["OCR extraction before intake","Preserve source type"], apis:["OCR/PyTesseract"], outputs:["ocr text"], logos:[["Tesseract OCR",LOGO("tesseract-ocr.jpg")]] },
+      "PDF Extract Node": { role:"Input Sub-agent", explain:"Extracts text from PDFs.", rules:["Parse PDF pages","Limit extraction budget"], apis:["PyMuPDF"], outputs:["pdf text"], logos:[["Python",LOGO("python.svg")]] },
+    };
+    const MODELS = {
+      flow1: [
+        { id:"System", x:120, y:1850 },
+        { id:"Text Input Node", x:1750, y:1410, sub:true, parent:"Intake Agent" },
+        { id:"Image OCR Node", x:1750, y:1850, sub:true, parent:"Intake Agent" },
+        { id:"PDF Extract Node", x:1750, y:2290, sub:true, parent:"Intake Agent" },
+        { id:"Intake Agent", x:2390, y:1850 },
+        { id:"Domain Router Agent", x:3400, y:1850 },
+        { id:"Web Research Agent", x:4700, y:790 },
+        { id:"Primary Source Agent", x:4700, y:1850 },
+        { id:"Data Extractor Agent", x:4700, y:2750 },
+        { id:"Query Planner", x:5630, y:1140, sub:true, parent:"Web Research Agent" },
+        { id:"API Retriever", x:5630, y:1570, sub:true, parent:"Primary Source Agent" },
+        { id:"Scrape Retriever", x:5630, y:2240, sub:true, parent:"Data Extractor Agent" },
+        { id:"Tri Consistency Agent", x:6620, y:143 },
+        { id:"Evidence Aggregator Agent", x:6620, y:1850 },
+        { id:"Relevance Scorer", x:7630, y:143, sub:true, parent:"Source Quality Agent" },
+        { id:"Temporal Scorer", x:8340, y:143, sub:true, parent:"Source Quality Agent" },
+        { id:"Diversity Filter", x:9040, y:143, sub:true, parent:"Source Quality Agent" },
+        { id:"Source Quality Agent", x:8120, y:790 },
+        { id:"Stat Comparator Agent", x:8120, y:1850 },
+        { id:"Skeptic Agent", x:8120, y:2750 },
+        { id:"Consensus Moderator Agent", x:10060, y:1850 },
+        { id:"Cache Policy Node", x:11470, y:760 },
+        { id:"Similar Claims Node", x:11440, y:1480 },
+        { id:"Run Store Node", x:11480, y:2520 },
+        { id:"Change Log Node", x:13020, y:1520 },
+        { id:"Trust Stats Node", x:13020, y:2520 }
+      ],
+      flow2: [
+        { id:"System", x:120, y:980 },
+        { id:"Text Input Node", x:820, y:460, sub:true, parent:"Intake Agent" },
+        { id:"Image OCR Node", x:820, y:980, sub:true, parent:"Intake Agent" },
+        { id:"PDF Extract Node", x:820, y:1500, sub:true, parent:"Intake Agent" },
+        { id:"Intake Agent", x:1580, y:980 },
+        { id:"Domain Router Agent", x:2500, y:980 },
+        { id:"Web Research Agent", x:3380, y:500 },
+        { id:"Primary Source Agent", x:3380, y:980 },
+        { id:"Data Extractor Agent", x:3380, y:1460 },
+        { id:"Query Planner", x:4460, y:620, sub:true, parent:"Web Research Agent" },
+        { id:"API Retriever", x:4460, y:980, sub:true, parent:"Primary Source Agent" },
+        { id:"Scrape Retriever", x:4460, y:1340, sub:true, parent:"Data Extractor Agent" },
+        { id:"Tri Consistency Agent", x:5300, y:700 },
+        { id:"Evidence Aggregator Agent", x:5300, y:1100 },
+        { id:"Relevance Scorer", x:6800, y:260, sub:true, parent:"Source Quality Agent" },
+        { id:"Temporal Scorer", x:7480, y:260, sub:true, parent:"Source Quality Agent" },
+        { id:"Diversity Filter", x:8160, y:260, sub:true, parent:"Source Quality Agent" },
+        { id:"Source Quality Agent", x:6800, y:880 },
+        { id:"Stat Comparator Agent", x:6800, y:1520 },
+        { id:"Skeptic Agent", x:6800, y:2160 },
+        { id:"Consensus Moderator Agent", x:8740, y:1400 },
+        { id:"Cache Policy Node", x:9820, y:920 },
+        { id:"Similar Claims Node", x:9820, y:1400 },
+        { id:"Run Store Node", x:9820, y:1880 },
+        { id:"Change Log Node", x:10940, y:1220 },
+        { id:"Trust Stats Node", x:10940, y:1880 }
+      ]
+    };
+    const EDGES = [
+      ["System","Text Input Node"],["System","Image OCR Node"],["System","PDF Extract Node"],
+      ["Text Input Node","Intake Agent"],["Image OCR Node","Intake Agent"],["PDF Extract Node","Intake Agent"],
+      ["Intake Agent","Domain Router Agent"],
+      ["Domain Router Agent","Web Research Agent"],["Domain Router Agent","Primary Source Agent"],["Domain Router Agent","Data Extractor Agent"],
+      ["Web Research Agent","Query Planner"],["Primary Source Agent","API Retriever"],["Data Extractor Agent","Scrape Retriever"],
+      ["Query Planner","Tri Consistency Agent"],["API Retriever","Tri Consistency Agent"],["Scrape Retriever","Tri Consistency Agent"],
+      ["Query Planner","Evidence Aggregator Agent"],["API Retriever","Evidence Aggregator Agent"],["Scrape Retriever","Evidence Aggregator Agent"],
+      ["Web Research Agent","Evidence Aggregator Agent"],["Primary Source Agent","Evidence Aggregator Agent"],["Data Extractor Agent","Evidence Aggregator Agent"],
+      ["Tri Consistency Agent","Evidence Aggregator Agent"],
+      ["Evidence Aggregator Agent","Source Quality Agent"],
+      ["Tri Consistency Agent","Source Quality Agent"],
+      ["Source Quality Agent","Relevance Scorer"],["Source Quality Agent","Temporal Scorer"],["Source Quality Agent","Diversity Filter"],
+      ["Relevance Scorer","Source Quality Agent"],["Temporal Scorer","Source Quality Agent"],["Diversity Filter","Source Quality Agent"],
+      ["Evidence Aggregator Agent","Stat Comparator Agent"],["Evidence Aggregator Agent","Skeptic Agent"],
+      ["Source Quality Agent","Consensus Moderator Agent"],["Stat Comparator Agent","Consensus Moderator Agent"],["Skeptic Agent","Consensus Moderator Agent"],
+      ["System","Cache Policy Node"],["Cache Policy Node","Similar Claims Node"],
+      ["Similar Claims Node","Domain Router Agent"],["Similar Claims Node","Web Research Agent"],["Similar Claims Node","Primary Source Agent"],["Similar Claims Node","Data Extractor Agent"],
+      ["Consensus Moderator Agent","Run Store Node"],["Run Store Node","Similar Claims Node"],
+      ["Run Store Node","Change Log Node"],["Run Store Node","Trust Stats Node"],
+      ["Consensus Moderator Agent","Web Research Agent","loop"]
+    ];
+    // Custom route for only yellow retry edge.
+    // Edit points to change path shape:
+    // p1x/p1y first bend, p2x/p2y second bend, p3x/p3y third bend.
+    const CUSTOM_EDGE_ROUTE = {
+      "Consensus Moderator Agent=>Web Research Agent": {
+        p1x: 10400, p1y: 2000,
+        p2x: 10400, p2y: 120,
+        p3x: 6000, p3y: 120,
+        targetAnchor: "top-center",
+        targetXOffset: 90,
+        targetYOffset: 0
+      },
+      "Cache Policy Node=>Similar Claims Node": {
+        p1x: 11880, p1y: 1020,
+        p2x: 11880, p2y: 1320,
+        p3x: 11880, p3y: 1320,
+        targetAnchor: "top-center",
+        targetXOffset: 0,
+        targetYOffset: 0
+      },
+      "Run Store Node=>Similar Claims Node": {
+        p1x: 11820, p1y: 2520,
+        p2x: 11820, p2y: 1780,
+        p3x: 11820, p3y: 1780,
+        targetAnchor: "bottom-center",
+        targetXOffset: 0,
+        targetYOffset: 0
+      },
+      "Similar Claims Node=>Web Research Agent": {
+        p1x: 11390, p1y: 1480,
+        p2x: 11390, p2y: 120,
+        p3x: 5140, p3y: 120,
+        targetAnchor: "top-center",
+        targetXOffset: 0,
+        targetYOffset: 0
+      },
+      "Similar Claims Node=>Domain Router Agent": {
+        p1x: 11360, p1y: 1480,
+        p2x: 11360, p2y: 160,
+        p3x: 3840, p3y: 160,
+        targetAnchor: "top-center",
+        targetXOffset: 0,
+        targetYOffset: 0
+      },
+      "Similar Claims Node=>Primary Source Agent": {
+        p1x: 11340, p1y: 1480,
+        p2x: 11340, p2y: 210,
+        p3x: 5140, p3y: 210,
+        targetAnchor: "top-center",
+        targetXOffset: 0,
+        targetYOffset: 0
+      },
+      "Similar Claims Node=>Data Extractor Agent": {
+        p1x: 11240, p1y: 1480,
+        p2x: 11240, p2y: 3450,
+        p3x: 5200, p3y: 3450,
+        targetAnchor: "top-center",
+        targetXOffset: 0,
+        targetYOffset: 0
+      }
+    };
+
+    const world=document.getElementById("world"), svg=document.getElementById("edges"), timeline=document.getElementById("timeline"), summary=document.getElementById("summary"), inspector=document.getElementById("inspector"), verdictBox=document.getElementById("verdict"), totalTimer=document.getElementById("totalTimer"), hoverCard=document.getElementById("hoverCard");
+    const cardById=new Map(), edgeByPair=new Map(), stateById=new Map(), timerByNode=new Map(), stepByNode=new Map();
+    const RAG_NODES = new Set(["Cache Policy Node","Similar Claims Node","Run Store Node","Change Log Node","Trust Stats Node"]);
+    const SUB_SYNTH = {
+      "Web Research Agent": ["Query Planner"],
+      "Primary Source Agent": ["API Retriever"],
+      "Data Extractor Agent": ["Scrape Retriever"],
+      "Source Quality Agent": ["Relevance Scorer","Temporal Scorer","Diversity Filter"]
+    };
+    let orderedEvents=[], stepCursor=-1, running=false, startMs=0, mode="flow1", prevEventAgent="", activeInputNode="Text Input Node", eventCounter=0, currentRunId="";
+    let devMode=false, selectedNodeId="";
+    const findNode=(id)=>MODELS[mode].find(x=>x.id===id);
+    const cssId=(id)=>id.replace(/[^a-zA-Z0-9_-]/g,"_");
+    const fmt=(ms)=>{const s=ms/1000;const m=Math.floor(s/60);const r=(s%60).toFixed(4).padStart(7,"0");return `${String(m).padStart(2,"0")}:${r}`;}
+    function statusClass(status){const s=(status||"").toLowerCase();if(s==="started")return"started";if(s==="running"||s==="file_extracted")return"running";if(s==="retry"||s==="needs_live_evidence")return"retry";if(s==="completed")return"completed";if(s==="failed"||s==="file_warning"||s==="error"||s==="cancelled")return"failed";return"ended";}
+    function nodeStageClass(id){
+      const input = new Set(["System","Text Input Node","Image OCR Node","PDF Extract Node","Intake Agent","Domain Router Agent"]);
+      const retrieval = new Set(["Web Research Agent","Primary Source Agent","Data Extractor Agent","Query Planner","API Retriever","Scrape Retriever","Tri Consistency Agent","Evidence Aggregator Agent"]);
+      const reason = new Set(["Skeptic Agent","Source Quality Agent","Relevance Scorer","Temporal Scorer","Diversity Filter","Stat Comparator Agent"]);
+      if (input.has(id)) return "stage-input";
+      if (retrieval.has(id)) return "stage-retrieval";
+      if (reason.has(id)) return "stage-reason";
+      return "stage-decision";
+    }
+    const tag=(s)=>`<span class="tag ${statusClass(s)}">${s}</span>`;
+    function edgePath(a,b,key){
+      const MAIN_W = 880, SUB_W = 420;
+      const srcW = a.sub ? SUB_W : MAIN_W;
+      const dstW = b.sub ? SUB_W : MAIN_W;
+      const srcH = a.sub ? 230 : 260;
+      const dstH = b.sub ? 230 : 260;
+      const ax = a.x + Math.floor(srcW / 2), ay = a.y + Math.floor(srcH / 2);
+      const bx = b.x + Math.floor(dstW / 2), by = b.y + Math.floor(dstH / 2);
+
+      function anchor(node, w, h, side){
+        if(side==="left") return [node.x, node.y + Math.floor(h/2)];
+        if(side==="right") return [node.x + w, node.y + Math.floor(h/2)];
+        if(side==="top") return [node.x + Math.floor(w/2), node.y];
+        return [node.x + Math.floor(w/2), node.y + h];
+      }
+
+      // Select anchors using actual relative position.
+      let fromSide = "right", toSide = "left";
+      const dx = bx - ax, dy = by - ay;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        fromSide = dx >= 0 ? "right" : "left";
+        toSide = dx >= 0 ? "left" : "right";
+      } else {
+        fromSide = dy >= 0 ? "bottom" : "top";
+        toSide = dy >= 0 ? "top" : "bottom";
+      }
+
+      // Stronger layout intents.
+      const sqSubs = new Set(["Relevance Scorer","Temporal Scorer","Diversity Filter"]);
+      const trioSubs = new Set(["Query Planner","API Retriever","Scrape Retriever"]);
+      const trioMains = new Set(["Web Research Agent","Primary Source Agent","Data Extractor Agent"]);
+      if (a.id === "Source Quality Agent" && sqSubs.has(b.id)) { fromSide="top"; toSide="bottom"; }
+      if (sqSubs.has(a.id) && b.id === "Source Quality Agent") { fromSide="bottom"; toSide="top"; }
+      if (trioSubs.has(a.id) && ["Tri Consistency Agent","Evidence Aggregator Agent"].includes(b.id)) { fromSide="right"; toSide="left"; }
+      if (["Web Research Agent","Primary Source Agent","Data Extractor Agent"].includes(a.id) && b.id==="Evidence Aggregator Agent") { fromSide="right"; toSide="left"; }
+      if (a.id==="Evidence Aggregator Agent" && ["Web Research Agent","Primary Source Agent","Data Extractor Agent"].includes(b.id)) { fromSide="left"; toSide="right"; }
+      if (trioMains.has(a.id) && trioSubs.has(b.id)) { fromSide="bottom"; toSide="top"; }
+      if (trioSubs.has(a.id) && trioMains.has(b.id)) { fromSide="top"; toSide="bottom"; }
+      // Similar Claims routing policy:
+      // inbound from Cache Policy -> top of Similar
+      if (a.id === "Cache Policy Node" && b.id === "Similar Claims Node") { fromSide="bottom"; toSide="top"; }
+      // inbound from Run Store -> bottom of Similar
+      if (a.id === "Run Store Node" && b.id === "Similar Claims Node") { fromSide="top"; toSide="bottom"; }
+      // outbound from Similar -> left side to retrieval/router lanes
+      if (a.id === "Similar Claims Node" && ["Domain Router Agent","Web Research Agent","Primary Source Agent","Data Extractor Agent"].includes(b.id)) { fromSide="left"; toSide="right"; }
+
+      let [x1,y1] = anchor(a,srcW,srcH,fromSide);
+      let [x2,y2] = anchor(b,dstW,dstH,toSide);
+      // SourceQuality -> sub-agents: keep three clean separate outbound lines.
+      if (a.id === "Source Quality Agent" && sqSubs.has(b.id)) {
+        const hubY = y1 - 120;
+        return `M ${x1} ${y1} L ${x1} ${hubY} L ${x2} ${hubY} L ${x2} ${y2}`;
+      }
+      // Trio main <-> trio sub-agents: direct vertical tap to the main lane.
+      if (trioMains.has(a.id) && trioSubs.has(b.id)) {
+        return `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
+      }
+      if (trioSubs.has(a.id) && trioMains.has(b.id)) {
+        return `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
+      }
+      // sub-agents -> SourceQuality: single inbound trunk.
+      if (sqSubs.has(a.id) && b.id === "Source Quality Agent") {
+        const trunkX = b.x + Math.floor(dstW / 2);
+        const busY = y2 - 170;
+        const rel = findNode("Relevance Scorer");
+        const div = findNode("Diversity Filter");
+        const relCenter = rel ? (rel.x + Math.floor((rel.sub ? SUB_W : MAIN_W) / 2)) : x1;
+        const divCenter = div ? (div.x + Math.floor((div.sub ? SUB_W : MAIN_W) / 2)) : x1;
+        if (a.id === "Diversity Filter") {
+          return `M ${x1} ${y1} L ${x1} ${busY} L ${relCenter} ${busY} L ${divCenter} ${busY} L ${trunkX} ${busY} L ${trunkX} ${y2}`;
+        }
+        return `M ${x1} ${y1} L ${x1} ${busY}`;
+      }
+      if (a.id === "Source Quality Agent" && b.id === "Consensus Moderator Agent") y1 -= 10;
+      const custom = CUSTOM_EDGE_ROUTE[key];
+      if (custom) {
+        let tx = x2 + (custom.targetXOffset || 0);
+        let ty = y2 + (custom.targetYOffset || 0);
+        if (custom.targetAnchor === "top-center") {
+          tx = b.x + Math.floor(dstW / 2) + (custom.targetXOffset || 0);
+          ty = b.y + (custom.targetYOffset || 0);
+        } else if (custom.targetAnchor === "left-center") {
+          tx = b.x + (custom.targetXOffset || 0);
+          ty = b.y + Math.floor(dstH / 2) + (custom.targetYOffset || 0);
+        } else if (custom.targetAnchor === "bottom-center") {
+          tx = b.x + Math.floor(dstW / 2) + (custom.targetXOffset || 0);
+          ty = b.y + dstH + (custom.targetYOffset || 0);
+        }
+        return `M ${x1} ${y1} L ${custom.p1x} ${custom.p1y} L ${custom.p2x} ${custom.p2y} L ${custom.p3x} ${custom.p3y} L ${tx} ${custom.p3y} L ${tx} ${ty}`;
+      }
+
+      // RAG-only offsets: apply only when at least one side is in RAG pipeline.
+      if (RAG_NODES.has(a.id) || RAG_NODES.has(b.id)) {
+        const ragOrder = ["Cache Policy Node","Similar Claims Node","Run Store Node","Change Log Node","Trust Stats Node"];
+        const ai = ragOrder.indexOf(a.id);
+        const bi = ragOrder.indexOf(b.id);
+        const rdx = (bi >= 0 ? bi : 2) - (ai >= 0 ? ai : 2);
+        const yOff = Math.max(-160, Math.min(160, ((ai >= 0 ? ai : 2) - 2) * 42));
+        const laneX = (fromSide === "left" || fromSide === "right")
+          ? (x1 + (rdx >= 0 ? 260 : -260))
+          : (x1 + (dx >= 0 ? 230 : -230));
+        const laneY = y1 + yOff;
+        if (fromSide === "left" || fromSide === "right") {
+          return `M ${x1} ${y1} L ${laneX} ${y1} L ${laneX} ${y2} L ${x2} ${y2}`;
+        }
+        return `M ${x1} ${y1} L ${x1} ${laneY} L ${x2} ${laneY} L ${x2} ${y2}`;
+      }
+
+      // Orthogonal path computed from anchors.
+      if (fromSide === "left" || fromSide === "right") {
+        const laneX = Math.round((x1 + x2) / 2);
+        return `M ${x1} ${y1} L ${laneX} ${y1} L ${laneX} ${y2} L ${x2} ${y2}`;
+      }
+      const laneY = Math.round((y1 + y2) / 2);
+      return `M ${x1} ${y1} L ${x1} ${laneY} L ${x2} ${laneY} L ${x2} ${y2}`;
+    }
+
+    function clearWorld(){cardById.clear();edgeByPair.clear();stateById.clear();timerByNode.clear();world.querySelectorAll(".node").forEach(n=>n.remove());svg.innerHTML="";}
+    function renderNodes(){
+      MODELS[mode].forEach(a=>{
+        const info=AGENT_INFO[a.id]||{role:a.id,explain:"",logos:[["agent",LOGO("vscode.svg")]]};
+        const icon=info.logos[0][1];
+        const logos=(info.logos||[]).map(x=>`<img class="mini-logo" src="${x[1]}" title="${x[0]}" alt="${x[0]}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';">`).join("");
+        const el=document.createElement("article");
+        el.className=`node undiscovered ${a.sub?"sub":""} ${nodeStageClass(a.id)}`;
+        el.style.left=`${a.x}px`; el.style.top=`${a.y}px`;
+        el.innerHTML=`<span class="stepmark" id="step-${cssId(a.id)}">-</span><div class="node-head"><span class="n8n-logo"><img src="${icon}" alt="${a.id}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span><h3>${a.id}</h3></div><p>${info.role}</p><div class="node-logos" id="logos-${cssId(a.id)}">${logos}</div><span class="state">waiting</span><div class="nmeta" id="nmeta-${cssId(a.id)}">00:00.0</div><div class="steplist" id="steplist-${cssId(a.id)}"></div>`;
+        el.onclick=()=>selectAgent(a.id);
+        el.onmouseenter=(e)=>showHover(a.id,e); el.onmousemove=(e)=>moveHover(e); el.onmouseleave=hideHover;
+        world.appendChild(el);
+        cardById.set(a.id,el); stateById.set(a.id,{status:"waiting",message:"Not started"}); timerByNode.set(a.id,{start:0,dur:0,live:false}); stepByNode.set(a.id,[]);
+      });
+    }
+    function markStep(id, stepNo){
+      const arr = stepByNode.get(id) || [];
+      arr.push(String(stepNo));
+      stepByNode.set(id, arr);
+      const badge = document.getElementById(`step-${cssId(id)}`);
+      const list = document.getElementById(`steplist-${cssId(id)}`);
+      if(badge){
+        const uniq = Array.from(new Set(arr));
+        const show = uniq.slice(-2).join(",");
+        badge.textContent = show || String(stepNo);
+      }
+      if(list){
+        const tail = arr.slice(-6).join(", ");
+        list.textContent = arr.length>1 ? `steps: ${tail}` : `step: ${tail}`;
+      }
+    }
+    function pushEvent(agent,status,message,data){
+      const ev={agent,status,message,data:data||{}};
+      orderedEvents.push(ev);
+      eventCounter += 1;
+      markStep(agent,eventCounter);
+      return ev;
+    }
+    function ragEdgeStageClass(from,to){
+      const key = `${from}|${to}`;
+      if (key.includes("Cache Policy Node")) return "stage-rag-cache";
+      if (key.includes("Similar Claims Node")) return "stage-rag-similar";
+      if (key.includes("Run Store Node")) return "stage-rag-store";
+      if (key.includes("Change Log Node")) return "stage-rag-change";
+      if (key.includes("Trust Stats Node")) return "stage-rag-trust";
+      return "stage-rag-cache";
+    }
+    function edgeStageClass(from, to){
+      const subNodes = new Set(["Text Input Node","Image OCR Node","PDF Extract Node","Query Planner","API Retriever","Scrape Retriever","Relevance Scorer","Temporal Scorer","Diversity Filter"]);
+      if (subNodes.has(from) || subNodes.has(to)) return "stage-sub";
+      if (RAG_NODES.has(from) || RAG_NODES.has(to)) return ragEdgeStageClass(from,to);
+      if (["System","Intake Agent","Domain Router Agent"].includes(from) || ["System","Intake Agent","Domain Router Agent"].includes(to)) return "stage-input";
+      if (["Web Research Agent","Primary Source Agent","Data Extractor Agent","Tri Consistency Agent","Evidence Aggregator Agent"].includes(from)
+        || ["Web Research Agent","Primary Source Agent","Data Extractor Agent","Tri Consistency Agent","Evidence Aggregator Agent"].includes(to)) return "stage-retrieval";
+      if (["Skeptic Agent","Source Quality Agent","Stat Comparator Agent"].includes(from) || ["Skeptic Agent","Source Quality Agent","Stat Comparator Agent"].includes(to)) return "stage-reason";
+      return "stage-decision";
+    }
+    function pushMemoryFlowEvents(out){
+      if(!out || !out.cache) return;
+      const cache = out.cache || {};
+      const similar = Array.isArray(out.similar_claims) ? out.similar_claims : [];
+      const changes = Array.isArray(out.change_log) ? out.change_log : [];
+      pushEvent("Cache Policy Node","completed",`Cache mode=${cache.mode||"off"} hit=${cache.hit? "yes":"no"}`,cache);
+      setNodeState("Cache Policy Node","completed",`Cache mode=${cache.mode||"off"} hit=${cache.hit? "yes":"no"}`,cache);
+      const simMsg = `Similar claims found: ${similar.length}`;
+      pushEvent("Similar Claims Node","completed",simMsg,{count:similar.length,items:similar.slice(0,3)});
+      setNodeState("Similar Claims Node","completed",simMsg,{count:similar.length,items:similar.slice(0,3)});
+      const ts = out.timestamps || {};
+      const storeMsg = `Stored run=${out.run_id||"n/a"} session=${out.session_id||"n/a"}`;
+      pushEvent("Run Store Node","completed",storeMsg,{run_id:out.run_id,session_id:out.session_id,timestamps:ts});
+      setNodeState("Run Store Node","completed",storeMsg,{run_id:out.run_id,session_id:out.session_id,timestamps:ts});
+      const changeMsg = `Change log updates: ${changes.length}`;
+      pushEvent("Change Log Node","completed",changeMsg,{count:changes.length,items:changes.slice(0,3)});
+      setNodeState("Change Log Node","completed",changeMsg,{count:changes.length,items:changes.slice(0,3)});
+      const trustMsg = `Trust stats updated from ${((out.sources||[]).length)} source(s)`;
+      pushEvent("Trust Stats Node","completed",trustMsg,{source_count:(out.sources||[]).length});
+      setNodeState("Trust Stats Node","completed",trustMsg,{source_count:(out.sources||[]).length});
+      const m1=document.createElement("div");
+      m1.innerHTML=`${String(eventCounter-4).padStart(2,"0")} ${tag("completed")} <strong>Cache Policy Node</strong> Cache mode=${cache.mode||"off"} hit=${cache.hit? "yes":"no"}`;
+      timeline.appendChild(m1);
+      const m2=document.createElement("div");
+      m2.innerHTML=`${String(eventCounter-3).padStart(2,"0")} ${tag("completed")} <strong>Similar Claims Node</strong> Similar claims found: ${similar.length}`;
+      timeline.appendChild(m2);
+      const m3=document.createElement("div");
+      m3.innerHTML=`${String(eventCounter-2).padStart(2,"0")} ${tag("completed")} <strong>Run Store Node</strong> Stored run/session history`;
+      timeline.appendChild(m3);
+      const m4=document.createElement("div");
+      m4.innerHTML=`${String(eventCounter-1).padStart(2,"0")} ${tag("completed")} <strong>Change Log Node</strong> Change log updates: ${changes.length}`;
+      timeline.appendChild(m4);
+      const m5=document.createElement("div");
+      m5.innerHTML=`${String(eventCounter).padStart(2,"0")} ${tag("completed")} <strong>Trust Stats Node</strong> Trust stats updated`;
+      timeline.appendChild(m5);
+      timeline.scrollTop=timeline.scrollHeight;
+    }
+    function setNodeLogos(id, logos){
+      const el=document.getElementById(`logos-${cssId(id)}`);
+      if(!el || !Array.isArray(logos) || !logos.length) return;
+      el.innerHTML = logos.map(x=>`<img class="mini-logo" src="${x[1]}" title="${x[0]}" alt="${x[0]}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';">`).join("");
+    }
+    function applyDynamicRunLogos(result){
+      const src = (result && Array.isArray(result.sources)) ? result.sources : [];
+      if(!src.length) return;
+      const channels = new Set(src.map(s=>String(s.channel||"").toLowerCase()));
+      const hasApi = channels.has("api_data");
+      const hasScrape = channels.has("web_scrape");
+      const hasWeb = channels.has("web_search") || channels.has("google_search_api");
+      const hasTrusted = src.some(s=>["trusted","reference"].includes(String(s.source_type||"").toLowerCase()));
+
+      if (hasWeb) setNodeLogos("Web Research Agent", [["Web",LOGO("search-logo.webp")],["Google",LOGO("google.svg")],["DuckDuckGo",LOGO("duckduckgo.svg")]]);
+      if (hasTrusted) setNodeLogos("Primary Source Agent", [["Trusted",LOGO("worldbank.svg")],["Web",LOGO("search-logo.webp")],["Google",LOGO("google.svg")]]);
+      if (hasApi || hasScrape) setNodeLogos("Data Extractor Agent", [["Python",LOGO("python.svg")],["Scrape",LOGO("w3c.svg")],["Web",LOGO("search.svg")]]);
+      setNodeLogos("Evidence Aggregator Agent", [["JSON",LOGO("json-logo.png")],["Table",LOGO("databricks.svg")],["Web",LOGO("search-logo.webp")]]);
+      updateEvidenceFormatSummary(result);
+    }
+    function updateEvidenceFormatSummary(result){
+      const el=document.getElementById("formatSummary");
+      if(!el){return;}
+      const src=(result && Array.isArray(result.sources))?result.sources:[];
+      if(!src.length){
+        el.textContent="Evidence formats: canonical schema active (no evidence yet).";
+        return;
+      }
+      const channels=new Set(src.map(s=>String(s.channel||"").toLowerCase()).filter(Boolean));
+      const types=new Set(src.map(s=>String(s.source_type||"").toLowerCase()).filter(Boolean));
+      const formats=[];
+      if(channels.has("api_data")) formats.push("API JSON");
+      if(channels.has("web_scrape")) formats.push("Web Scrape Text");
+      if(channels.has("web_search") || channels.has("google_search_api")) formats.push("Search Snippets");
+      if(types.has("trusted") || types.has("reference")) formats.push("Primary References");
+      if(!formats.length) formats.push("General Canonical Evidence");
+      el.textContent=`Evidence formats: ${formats.join(" | ")} -> normalized to canonical EvidenceItem schema.`;
+    }
+    function renderEdges(){
+      const defs = document.createElementNS("http://www.w3.org/2000/svg","defs");
+      defs.innerHTML = `
+        <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#d9d9d9"></path>
+        </marker>
+      `;
+      svg.appendChild(defs);
+      const overlayKeys = new Set([
+        "Similar Claims Node=>Domain Router Agent",
+        "Similar Claims Node=>Primary Source Agent",
+        "Similar Claims Node=>Data Extractor Agent",
+      ]);
+      const orderedEdges = [...EDGES].sort((a,b)=>{
+        const ka = `${a[0]}=>${a[1]}`;
+        const kb = `${b[0]}=>${b[1]}`;
+        const pa = overlayKeys.has(ka) ? 1 : 0;
+        const pb = overlayKeys.has(kb) ? 1 : 0;
+        return pa - pb;
+      });
+      orderedEdges.forEach(([f,t,type])=>{
+        const a=findNode(f), b=findNode(t); if(!a||!b)return;
+        const path=document.createElementNS("http://www.w3.org/2000/svg","path");
+        const key = `${f}=>${t}`;
+        const stClass = edgeStageClass(f,t);
+        path.setAttribute("d",edgePath(a,b,key)); path.setAttribute("class",`edge ${stClass} ${type==="loop"?"loop":""}`); svg.appendChild(path);
+        edgeByPair.set(`${f}=>${t}`,path);
+      });
+    }
+    function selectAgent(id){
+      selectedNodeId=id;
+      for(const [aid,c] of cardById.entries()) c.classList.toggle("active",aid===id);
+      const st=stateById.get(id)||{};
+      inspector.textContent=`${id} | ${st.status||"waiting"} | ${st.message||""}`;
+      updateDevInfo();
+    }
+    function updateDevInfo(){
+      const infoEl=document.getElementById("devInfo"); if(!infoEl) return;
+      const n=findNode(selectedNodeId);
+      if(!n){ infoEl.textContent="Select a node, then use arrow keys."; return; }
+      infoEl.textContent=`${selectedNodeId} | x=${n.x}, y=${n.y} | mode=${mode} | step=${devMode?"10 (Shift=40)":"off"}`;
+    }
+    function moveSelected(dx,dy){
+      const n=findNode(selectedNodeId); if(!n) return;
+      n.x+=dx; n.y+=dy;
+      const card=cardById.get(selectedNodeId);
+      if(card){ card.style.left=`${n.x}px`; card.style.top=`${n.y}px`; }
+      renderEdges();
+      updateDevInfo();
+    }
+    function showHover(id,e){
+      const info=AGENT_INFO[id]||{role:"",explain:"",rules:[],apis:[],outputs:[],logos:[]};
+      const logos=(info.logos||[]).map(x=>`<span class='logo'><img src='${x[1]}' alt='${x[0]}' onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span>`).join("");
+      const rules=(info.rules||[]).map(x=>`<li>${x}</li>`).join("");
+      const outputs=(info.outputs||[]).map(x=>`<li>${x}</li>`).join("");
+      hoverCard.innerHTML=`<div class="hover-head"><span class="n8n-logo"><img src="${(info.logos?.[0]?.[1])||LOGO("vscode.svg")}" alt="${id}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span><h3>${id}</h3></div><p>${info.role}</p><p>${info.explain||""}</p><div class="hover-sec"><h4>Rules / Guardrails</h4><ul class="hover-list">${rules}</ul></div><div class="hover-sec"><h4>Outputs</h4><ul class="hover-list">${outputs}</ul></div><div class="hover-sec"><h4>APIs / Tools</h4>${(info.apis||[]).map(x=>`<span class='pill'>${x}</span>`).join("")}</div><div class="hover-sec"><h4>Integrations</h4><div class="logos">${logos}</div></div>`;
+      hoverCard.style.display="block"; moveHover(e);
+    }
+    function moveHover(e){hoverCard.style.left=`${Math.min(window.innerWidth-490,e.clientX+16)}px`; hoverCard.style.top=`${Math.min(window.innerHeight-260,e.clientY+16)}px`;}
+    function hideHover(){hoverCard.style.display="none";}
+    function setNodeState(id,status,message,data){
+      const card=cardById.get(id); if(!card)return;
+      card.querySelector(".state").textContent=status;
+      card.classList.remove("undiscovered");
+      card.classList.add("discovered");
+      card.classList.remove("started","running","completed","ended","retry","failed","file_extracted","file_warning","needs_live_evidence");
+      card.classList.add(statusClass(status));
+      stateById.set(id,{status,message,data:data||{}});
+      const t=timerByNode.get(id)||{start:0,dur:0,live:false};
+      if(status!=="waiting" && !t.start){t.start=Date.now(); t.live=true;}
+      if(status==="started"||status==="retry"||status==="running"||status==="file_extracted"){t.live=true;}
+      if(status==="completed"||status==="failed"){
+        if(!t.start) t.start = Date.now() - 20;
+        t.dur = Math.max(20, Date.now()-t.start);
+        t.live=false;
+      }
+      timerByNode.set(id,t); updateNodeTimer(id);
+      // propagate to sub-agents
+      MODELS[mode].filter(n=>n.parent===id).forEach(sub=>{
+        if (id === "Intake Agent" && ["Text Input Node","Image OCR Node","PDF Extract Node"].includes(sub.id) && sub.id !== activeInputNode) {
+          return;
+        }
+        const sc=cardById.get(sub.id); if(!sc) return;
+        sc.classList.remove("undiscovered");
+        sc.classList.add("discovered");
+        sc.classList.remove("started","running","completed","ended","retry","failed","file_extracted","file_warning","needs_live_evidence");
+        sc.classList.add(statusClass(status)); sc.querySelector(".state").textContent=`${status}*`;
+        const st=timerByNode.get(sub.id)||{start:0,dur:0,live:false};
+        if(status!=="waiting" && !st.start){st.start=Date.now(); st.live=true;}
+        if(status==="started"||status==="retry"||status==="running"||status==="file_extracted"){st.live=true;}
+        if(status==="completed"||status==="failed"){
+          if(!st.start) st.start = Date.now() - 20;
+          st.dur = Math.max(20, Date.now()-st.start);
+          st.live=false;
+        }
+        timerByNode.set(sub.id,st); updateNodeTimer(sub.id);
+        // Ensure sub-agent connector becomes visible when parent triggers.
+        const e1=edgeByPair.get(`${id}=>${sub.id}`); if(e1) e1.classList.add("discovered");
+        const e2=edgeByPair.get(`${sub.id}=>${id}`); if(e2) e2.classList.add("discovered");
+        // Ensure outbound from sub-agents is visible when parent stage runs.
+        for(const [pair,p] of edgeByPair.entries()){
+          if(pair.startsWith(`${sub.id}=>`)) p.classList.add("discovered");
+        }
+      });
+    }
+    function updateNodeTimer(id){const t=timerByNode.get(id),el=document.getElementById(`nmeta-${cssId(id)}`); if(!t||!el)return; const v=t.live&&t.start?Date.now()-t.start:t.dur; el.textContent=fmt(v||0);}
+    function tickTimers(){if(running&&startMs)totalTimer.textContent=`Total: ${fmt(Date.now()-startMs)}`; for(const id of cardById.keys())updateNodeTimer(id);}
+    function finalizeLiveTimers(){
+      const now=Date.now();
+      for(const [id,t] of timerByNode.entries()){
+        if(t.live){
+          t.dur = t.start ? (now - t.start) : 0;
+          t.live = false;
+          timerByNode.set(id,t);
+          updateNodeTimer(id);
+        }
+      }
+    }
+    function clearFlash(){for(const p of edgeByPair.values()) p.classList.remove("active");}
+    function discoverFlow(from,current,status){
+      if(from && from!==current) activateEdge(from,current);
+      for(const [pair,p] of edgeByPair.entries()) {
+        if(pair.startsWith(current+"=>")) p.classList.add("discovered");
+      }
+      if((status||"").toLowerCase()==="retry"){
+        activateEdge("Consensus Moderator Agent","Web Research Agent");
+        activateEdge("Web Research Agent","Tri Consistency Agent");
+        activateEdge("Tri Consistency Agent","Evidence Aggregator Agent");
+      }
+    }
+    function activateEdge(from,to){
+      const p=edgeByPair.get(`${from}=>${to}`);
+      if(p){ p.classList.add("active"); p.classList.add("discovered"); }
+    }
+    function flashFlow(current,status){
+      clearFlash();
+      if(prevEventAgent && prevEventAgent!==current) activateEdge(prevEventAgent,current);
+      // standard outgoing emphasis + discovered persistence
+      for(const [pair,p] of edgeByPair.entries()) {
+        if(pair.startsWith(current+"=>")) { p.classList.add("active"); p.classList.add("discovered"); }
+      }
+      // retry loop emphasis
+      if((status||"").toLowerCase()==="retry"){ activateEdge("Consensus Moderator Agent","Web Research Agent"); activateEdge("Web Research Agent","Tri Consistency Agent"); activateEdge("Tri Consistency Agent","Evidence Aggregator Agent"); }
+    }
+    function showStep(i){
+      if(i<0||i>=orderedEvents.length)return;
+      stepCursor=i;
+      // Blackout first, then replay discovery up to this step.
+      for(const p of edgeByPair.values()){ p.classList.remove("discovered","active"); }
+      for(const [id,card] of cardById.entries()){
+        card.classList.remove("discovered");
+        card.classList.add("undiscovered");
+      }
+      const sys=cardById.get("System");
+      if(sys){ sys.classList.remove("undiscovered"); sys.classList.add("discovered"); }
+      let prev="";
+      for(let k=0;k<=i;k++){
+        const evk=orderedEvents[k];
+        const c=cardById.get(evk.agent);
+        if(c){ c.classList.remove("undiscovered"); c.classList.add("discovered"); }
+        MODELS[mode].filter(n=>n.parent===evk.agent).forEach(sub=>{
+          const sc=cardById.get(sub.id);
+          if(sc){ sc.classList.remove("undiscovered"); sc.classList.add("discovered"); }
+          const e1=edgeByPair.get(`${evk.agent}=>${sub.id}`); if(e1) e1.classList.add("discovered");
+          const e2=edgeByPair.get(`${sub.id}=>${evk.agent}`); if(e2) e2.classList.add("discovered");
+        });
+        // Preserve UI-routed input discovery during history replay.
+        if (evk.agent === "System" || evk.agent === "Intake Agent") {
+          const inCard=cardById.get(activeInputNode);
+          if(inCard){ inCard.classList.remove("undiscovered"); inCard.classList.add("discovered"); }
+          const p1=edgeByPair.get(`System=>${activeInputNode}`); if(p1) p1.classList.add("discovered");
+          const p2=edgeByPair.get(`${activeInputNode}=>Intake Agent`); if(p2) p2.classList.add("discovered");
+        }
+        discoverFlow(prev,evk.agent,evk.status);
+        prev=evk.agent;
+      }
+      const ev=orderedEvents[i];
+      selectAgent(ev.agent);
+      flashFlow(ev.agent,ev.status);
+      summary.textContent=`Step ${i+1}/${orderedEvents.length}: ${ev.agent} -> ${ev.status}`;
+    }
+    function resetStates(){
+      orderedEvents=[]; stepCursor=-1; prevEventAgent=""; eventCounter=0;
+      for(const id of cardById.keys()){
+        const card=cardById.get(id); if(card){card.classList.remove("active","started","running","completed","ended","retry","failed","file_extracted","file_warning","needs_live_evidence"); card.querySelector(".state").textContent="waiting";}
+        if (card) { card.classList.remove("discovered"); card.classList.add("undiscovered"); }
+        stateById.set(id,{status:"waiting",message:"Not started"});
+        timerByNode.set(id,{start:0,dur:0,live:false});
+        stepByNode.set(id,[]);
+        const badge=document.getElementById(`step-${cssId(id)}`); if(badge) badge.textContent="-";
+        const list=document.getElementById(`steplist-${cssId(id)}`); if(list) list.textContent="";
+        updateNodeTimer(id);
+      }
+      const systemCard = cardById.get("System");
+      if (systemCard) { systemCard.classList.remove("undiscovered"); systemCard.classList.add("discovered"); }
+      for(const p of edgeByPair.values()) p.classList.remove("discovered");
+      timeline.textContent="Waiting for run..."; summary.textContent="Status: idle"; verdictBox.textContent="Verdict: waiting | Confidence: 0%"; clearFlash(); running=false; currentRunId=""; startMs=0; totalTimer.textContent="Total: 00:00.0000"; const fmt=document.getElementById("formatSummary"); if(fmt) fmt.textContent="Evidence formats: canonical schema active (awaiting run)."; selectAgent("Intake Agent");
+    }
+    function normalizeModeLayout(modeKey){
+      const nodes = MODELS[modeKey];
+      if(!nodes || !nodes.length) return;
+      const snapTol = 10;
+      // Snap near-equal Xs and Ys into exact aligned lanes.
+      for(let i=0;i<nodes.length;i++){
+        for(let j=i+1;j<nodes.length;j++){
+          if(Math.abs(nodes[i].x - nodes[j].x) <= snapTol){
+            const x = Math.round((nodes[i].x + nodes[j].x)/2);
+            nodes[i].x = x; nodes[j].x = x;
+          }
+          if(Math.abs(nodes[i].y - nodes[j].y) <= snapTol){
+            const y = Math.round((nodes[i].y + nodes[j].y)/2);
+            nodes[i].y = y; nodes[j].y = y;
+          }
+        }
+      }
+      // Keep everything inside visible SVG positive area so lines don't clip.
+      let minX = Infinity, minY = Infinity;
+      for(const n of nodes){ minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); }
+      const margin = 120;
+      const dx = minX < margin ? (margin - minX) : 0;
+      const dy = minY < margin ? (margin - minY) : 0;
+      if(dx || dy){
+        for(const n of nodes){ n.x += dx; n.y += dy; }
+      }
+    }
+    function normAgent(id){const map={"Moderator":"Consensus Moderator Agent","Rebuttal Research Agent":"Web Research Agent","Archive Hunter Agent":"Primary Source Agent","Web Scout Agent":"Web Research Agent","Evidence Auditor Agent":"Source Quality Agent"}; return map[id]||id;}
+
+    async function runWorkflow(){
+      resetStates(); timeline.textContent="Starting async run...\n"; running=true; startMs=Date.now();
+      const body=new FormData();
+      const kind=(document.getElementById("inputKind").value||"text").toLowerCase();
+      const cacheMode=(document.getElementById("cacheMode").value||"off").toLowerCase();
+      const forceRecheck=document.getElementById("forceRecheck").checked ? "1" : "0";
+      const file=document.getElementById("wfFile").files?.[0] || null;
+      body.append("text",document.getElementById("claim").value);
+      body.append("input_type", kind==="image" ? "image" : (kind==="pdf" ? "pdf" : "text"));
+      body.append("cache_mode", cacheMode);
+      body.append("force_live_recheck", forceRecheck);
+      if(file) body.append("file", file);
+      activeInputNode = kind==="image" ? "Image OCR Node" : (kind==="pdf" ? "PDF Extract Node" : "Text Input Node");
+      setNodeState("System","started","Run orchestrator started",{input_type:kind, cache_mode:cacheMode, force_live_recheck:forceRecheck});
+      setNodeState(activeInputNode, "started", "Input branch active", {});
+      pushEvent("System","started",`Input route selected: ${kind} | cache=${cacheMode} | force=${forceRecheck}`,{input_type:kind, cache_mode:cacheMode, force_live_recheck:forceRecheck});
+      pushEvent(activeInputNode,"started","Sub-agent triggered",{});
+      // Explicitly discover the required input pipeline even before backend events arrive.
+      const in1=edgeByPair.get(`System=>${activeInputNode}`); if(in1) in1.classList.add("discovered","active");
+      const in2=edgeByPair.get(`${activeInputNode}=>Intake Agent`); if(in2) in2.classList.add("discovered","active");
+      const t0=document.createElement("div");
+      t0.innerHTML=`${String(eventCounter-1).padStart(2,"0")} ${tag("started")} <strong>System</strong> Input route selected: ${kind}`;
+      timeline.appendChild(t0);
+      const t1=document.createElement("div");
+      t1.innerHTML=`${String(eventCounter).padStart(2,"0")} ${tag("started")} <strong>${activeInputNode}</strong> Sub-agent triggered`;
+      timeline.appendChild(t1);
+      timeline.scrollTop=timeline.scrollHeight;
+      let runId=""; try{const r=await fetch("/api/verify/start",{method:"POST",body}); runId=(await r.json()).run_id; currentRunId=runId;}catch{timeline.textContent="start failed"; running=false; return;}
+      const seen=new Set(); const seenSynthetic=new Set(); let done=false;
+      while(!done){
+        try{
+          const ev=(await (await fetch(`/api/runs/${runId}/events`)).json()).events||[];
+          for(const [i,e] of ev.entries()){
+            const key=`${i}-${e.agent}-${e.status}-${e.message}`; if(seen.has(key))continue; seen.add(key);
+            const aid=normAgent(e.agent); const evn=pushEvent(aid,e.status,e.message,e.data);
+            setNodeState(aid,e.status,e.message,e.data); flashFlow(aid,e.status);
+            const row=document.createElement("div"); row.innerHTML=`${String(eventCounter).padStart(2,"0")} ${tag(e.status)} <strong>${e.agent}</strong> ${e.message}`; timeline.appendChild(row); timeline.scrollTop=timeline.scrollHeight;
+            // Synthesize sub-agent events (backend does not emit them).
+            const subs = SUB_SYNTH[aid] || [];
+            for (const sid of subs) {
+              const skey = `${aid}|${sid}|${e.status}|${orderedEvents.length}`;
+              if (seenSynthetic.has(skey)) continue;
+              seenSynthetic.add(skey);
+              setNodeState(sid, e.status, `Triggered by ${aid}`, { synthetic: true });
+              const base = eventCounter;
+              const pidx = subs.indexOf(sid) + 1;
+              orderedEvents.push({ agent: sid, status: e.status, message: `Triggered by ${aid}`, data: { synthetic: true } });
+              markStep(sid, `${base}.${pidx}`);
+              const srow=document.createElement("div");
+              srow.innerHTML=`${String(base).padStart(2,"0")}.${pidx} ${tag(e.status)} <strong>${sid}</strong> Triggered by ${aid}`;
+              timeline.appendChild(srow);
+            }
+            timeline.scrollTop=timeline.scrollHeight;
+            prevEventAgent = aid;
+          }
+          const st=await (await fetch(`/api/runs/${runId}/status`)).json();
+          if(st.status==="completed"||st.status==="failed"||st.status==="cancelled"){
+            done=true; running=false; clearFlash();
+            finalizeLiveTimers();
+            const out=st.result||{};
+            applyDynamicRunLogos(out);
+            updateEvidenceFormatSummary(out);
+            if(st.status==="completed"){ pushMemoryFlowEvents(out); }
+            summary.textContent=st.status==="failed"
+              ? `Status: failed | ${out.error||"run failed"}`
+              : (st.status==="cancelled"
+                ? `Status: cancelled | ${out.error||"run cancelled"}`
+                : `Status: completed | Verdict=${out.verdict||"n/a"} | Confidence=${out.confidence||0}% | Sources=${(out.sources||[]).length}`);
+            verdictBox.textContent=st.status==="cancelled"
+              ? "Verdict: cancelled | Confidence: 0%"
+              : `Verdict: ${out.verdict||"n/a"} | Confidence: ${out.confidence||0}%`;
+            currentRunId="";
+            if(orderedEvents.length)showStep(orderedEvents.length-1);
+          }
+        } catch { const row=document.createElement("div"); row.textContent="polling error"; timeline.appendChild(row); }
+        await new Promise(r=>setTimeout(r,450));
+      }
+    }
+
+    const canvas=document.getElementById("canvas"); let scale=.60,tx=-20,ty=-10,drag=false,sx=0,sy=0,stx=0,sty=0; const apply=()=>world.style.transform=`translate(${tx}px, ${ty}px) scale(${scale})`; apply();
+    function fitToView() {
+      const nodes = MODELS[mode];
+      if (!nodes.length) return;
+      let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+      for (const n of nodes) {
+        const w = n.sub ? 420 : 880;
+        const h = n.sub ? 230 : 260;
+        minX = Math.min(minX, n.x);
+        minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x + w);
+        maxY = Math.max(maxY, n.y + h);
+      }
+      const pad = 120;
+      const boxW = (maxX - minX) + pad * 2;
+      const boxH = (maxY - minY) + pad * 2;
+      const vw = canvas.clientWidth;
+      const vh = canvas.clientHeight;
+      const fitScale = Math.min(vw / boxW, vh / boxH);
+      scale = Math.max(0.18, Math.min(1.8, fitScale * 1.55));
+      tx = -(minX - pad) * scale + ((vw - boxW * scale) / 2);
+      ty = -(minY - pad) * scale + ((vh - boxH * scale) / 2);
+      apply();
+    }
+    canvas.addEventListener("mousedown",e=>{drag=true;sx=e.clientX;sy=e.clientY;stx=tx;sty=ty;}); window.addEventListener("mouseup",()=>drag=false); window.addEventListener("mousemove",e=>{if(!drag)return;tx=stx+(e.clientX-sx);ty=sty+(e.clientY-sy);apply();});
+    canvas.addEventListener("wheel",e=>{e.preventDefault();const r=canvas.getBoundingClientRect(),cx=e.clientX-r.left,cy=e.clientY-r.top,wx=(cx-tx)/scale,wy=(cy-ty)/scale;scale=Math.max(.08,Math.min(1.8,scale*(e.deltaY<0?1.08:.92)));tx=cx-wx*scale;ty=cy-wy*scale;apply();},{passive:false});
+    document.getElementById("run").onclick=runWorkflow;
+    document.getElementById("cancelRun").onclick=async()=>{
+      if(!running || !currentRunId){
+        const row=document.createElement("div");
+        row.textContent="No active run to cancel.";
+        timeline.appendChild(row);
+        timeline.scrollTop=timeline.scrollHeight;
+        return;
+      }
+      try{
+        await fetch(`/api/runs/${currentRunId}/cancel`,{method:"POST"});
+        const row=document.createElement("div");
+        row.innerHTML=`${tag("cancelled")} <strong>System</strong> Cancel requested`;
+        timeline.appendChild(row);
+        timeline.scrollTop=timeline.scrollHeight;
+      }catch{
+        const row=document.createElement("div");
+        row.textContent="Cancel request failed";
+        timeline.appendChild(row);
+        timeline.scrollTop=timeline.scrollHeight;
+      }
+    };
+    document.getElementById("reset").onclick=()=>{fitToView();resetStates();};
+    const panStep = 180;
+    document.getElementById("zoomIn").onclick=()=>{scale=Math.min(1.8,scale+0.08);apply();};
+    document.getElementById("zoomOut").onclick=()=>{scale=Math.max(0.35,scale-0.08);apply();};
+    document.getElementById("panLeft").onclick=()=>{tx+=panStep;apply();};
+    document.getElementById("panRight").onclick=()=>{tx-=panStep;apply();};
+    document.getElementById("panUp").onclick=()=>{ty+=panStep;apply();};
+    document.getElementById("panDown").onclick=()=>{ty-=panStep;apply();};
+    document.getElementById("panHome").onclick=()=>{fitToView();};
+    document.getElementById("prevStep").onclick=()=>{if(!orderedEvents.length)return;showStep(Math.max(0,stepCursor<=0?0:stepCursor-1));};
+    document.getElementById("nextStep").onclick=()=>{if(!orderedEvents.length)return;showStep(Math.min(orderedEvents.length-1,stepCursor+1));};
+    document.getElementById("fullBtn").onclick=()=>{
+      for(const [id,card] of cardById.entries()){
+        card.classList.remove("undiscovered");
+        card.classList.add("discovered");
+      }
+      for(const p of edgeByPair.values()){
+        p.classList.add("discovered");
+        p.classList.remove("active");
+      }
+      summary.textContent="Full pipeline view enabled";
+      clearFlash();
+    };
+    document.getElementById("devBtn").onclick=()=>{
+      devMode=!devMode;
+      document.getElementById("devBtn").textContent=`Dev: ${devMode?"On":"Off"}`;
+      document.getElementById("devPanel").style.display=devMode?"block":"none";
+      updateDevInfo();
+    };
+    document.getElementById("copyCoords").onclick=async()=>{
+      const payload = `// ${mode}\n` + JSON.stringify(MODELS[mode], null, 2);
+      try { await navigator.clipboard.writeText(payload); } catch {}
+      document.getElementById("devInfo").textContent=`Copied ${mode} coordinates to clipboard.`;
+    };
+    document.getElementById("saveCoords").onclick=()=>{
+      const payload = {
+        exported_at: new Date().toISOString(),
+        active_mode: mode,
+        flow1: MODELS.flow1,
+        flow2: MODELS.flow2
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `workflow-layout-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      document.getElementById("devInfo").textContent = "Saved layout JSON file (flow1 + flow2).";
+    };
+    window.addEventListener("keydown",(e)=>{
+      if(!devMode) return;
+      if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)){
+        e.preventDefault();
+        const step=e.shiftKey?40:10;
+        if(e.key==="ArrowLeft") moveSelected(-step,0);
+        if(e.key==="ArrowRight") moveSelected(step,0);
+        if(e.key==="ArrowUp") moveSelected(0,-step);
+        if(e.key==="ArrowDown") moveSelected(0,step);
+      }
+    });
+
+    normalizeModeLayout("flow1");
+    normalizeModeLayout("flow2");
+    clearWorld(); renderNodes(); renderEdges(); fitToView(); resetStates(); setInterval(tickTimers,100);
+  </script>
+</body>
+</html>

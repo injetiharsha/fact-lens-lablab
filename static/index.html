@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FactLens Crew</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="workspace">
+      <header class="masthead">
+        <p class="eyebrow">Collaborative Systems Hackathon Demo</p>
+        <h1>FactLens Crew</h1>
+        <p class="lede">Specialized agents investigate, challenge, score, and reconcile evidence before issuing a transparent verdict.</p>
+        <p class="lede"><a href="/workflow.html">Open Full Agent Workflow Map</a></p>
+      </header>
+
+      <form id="verify-form" class="verify-panel">
+        <label for="claim">Claim or context</label>
+        <textarea id="claim" name="text" rows="7" placeholder="Paste a claim, screenshot text, article paragraph, or document context...">The Earth revolves around the Sun.</textarea>
+
+        <div class="form-row">
+          <label class="file-picker">
+            <span>Attach PDF/Image</span>
+            <input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.tiff">
+          </label>
+          <button id="submit" type="submit">Run Crew</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="war-room">
+      <div class="section-title">
+        <p class="eyebrow">Live Collaboration</p>
+        <h2>War Room</h2>
+      </div>
+      <div id="agents" class="agent-grid"></div>
+    </section>
+
+    <section id="result" class="result-panel hidden">
+      <div>
+        <p class="eyebrow">Consensus</p>
+        <h2 id="verdict">Waiting</h2>
+        <p id="explanation"></p>
+      </div>
+      <div class="confidence">
+        <span id="confidence">0</span>
+        <small>confidence</small>
+      </div>
+    </section>
+
+    <section id="sources-panel" class="sources-panel hidden">
+      <div class="section-title">
+        <p class="eyebrow">Evidence</p>
+        <h2>Sources</h2>
+      </div>
+      <div id="sources"></div>
+    </section>
+  </main>
+
+  <script src="/script.js"></script>
+</body>
+</html>
