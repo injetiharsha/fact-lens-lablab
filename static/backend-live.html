@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FactLens Backend Live Trace</title>
+  <style>
+    :root{--bg:#050505;--panel:#0d0d0d;--line:#2a2a2a;--ink:#f4f4f4;--muted:#bdbdbd;--ok:#8dffb0;--warn:#ffd58a;--bad:#ffb0b0;--run:#9fdfff}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:Consolas,monospace;overflow-x:hidden}
+    .wrap{width:100vw;max-width:none;margin:0;padding:8px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+    .top h1{font:700 22px/1.2 "Segoe UI",Arial;margin:0}
+    .top a{color:#9fdfff;text-decoration:none}
+    .top .links{display:flex;gap:10px;align-items:center}
+    .grid{display:grid;grid-template-columns:minmax(300px,340px) minmax(0,1fr);gap:10px;align-items:start}
+    .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px;min-width:0}
+    .panel h2{margin:0 0 8px;font:700 14px "Segoe UI",Arial}
+    .field{display:grid;gap:6px;margin-bottom:8px}
+    label{font-size:12px;color:var(--muted)}
+    textarea,input,select{width:100%;background:#070707;color:#fff;border:1px solid #333;border-radius:8px;padding:8px;font:12px Consolas,monospace}
+    .row{display:flex;gap:8px;min-width:0}
+    button{background:#121212;color:#fff;border:1px solid #333;border-radius:8px;padding:8px 10px;cursor:pointer;font:700 12px Consolas}
+    button.primary{background:#fff;color:#000}
+    .badge{display:inline-block;border:1px solid #444;border-radius:999px;padding:2px 8px;font-size:11px}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)} .run{color:var(--run)}
+    .meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:8px}
+    .box{border:1px solid #2c2c2c;border-radius:10px;background:#050505;padding:8px;min-height:48px}
+    .log{height:360px;overflow:auto;border:1px solid #2c2c2c;border-radius:10px;background:#050505;padding:8px;font-size:12px;line-height:1.45}
+    .logline{margin-bottom:6px}
+    .logline b{color:#fff}
+    .event-card{border:1px solid #2f2f2f;border-left:4px solid #4c9bff;border-radius:8px;background:#0a0a0a;padding:6px 8px}
+    .event-card .agent{font-weight:700;color:#fff}
+    .event-card .meta{margin-top:3px;color:#bdbdbd;display:block}
+    .event-card.ok{border-left-color:#46c37b}
+    .event-card.run{border-left-color:#53b6ff}
+    .event-card.warn{border-left-color:#d3a562}
+    .event-card.bad{border-left-color:#db6e6e}
+    .json{height:330px;overflow:auto;border:1px solid #2c2c2c;border-radius:10px;background:#050505;padding:8px;font-size:12px;white-space:pre-wrap}
+    @media (max-width: 980px){
+      .grid{grid-template-columns:1fr}
+    }
+    table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+    th,td{border-bottom:1px solid #262626;padding:6px;vertical-align:top;text-align:left}
+    th{color:#cfcfcf}
+    td pre{margin:0;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto}
+    .raw-toggle summary{cursor:pointer;color:#9fdfff}
+    .raw-toggle[open] summary{color:#fff}
+    .raw-preview{color:#bcbcbc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+    .raw-toggle pre{max-height:220px;overflow:auto;margin-top:6px}
+    .msg-cell{white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto;color:#e5e5e5}
+    tr.agent-intake td{background:#0a1320}
+    tr.agent-retrieval td{background:#091a12}
+    tr.agent-scoring td{background:#1a1408}
+    tr.agent-decision td{background:#130a18}
+    tr.agent-system td{background:#121212}
+    tr.agent-sub td{background:#0e0e0e}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>FactLens Backend Live Trace</h1>
+      <div class="links">
+        <a href="/workflow.html">Back to Workflow</a>
+        <a href="/storage-live.html">Open Stored Data</a>
+      </div>
+    </div>
+    <div class="grid">
+      <section class="panel">
+        <h2>Run Controls</h2>
+        <div class="field">
+          <label>Claim</label>
+          <textarea id="claim" rows="6">India is the 4th largest economy in 2026</textarea>
+        </div>
+        <div class="field">
+          <label>Input Type</label>
+          <select id="inputType">
+            <option value="text">text</option>
+            <option value="image">image</option>
+            <option value="pdf">pdf</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Cache</label>
+          <select id="cacheMode">
+            <option value="off">off</option>
+            <option value="on">on</option>
+          </select>
+        </div>
+        <div class="row">
+          <button id="startBtn" class="primary">Start Run</button>
+          <button id="cancelBtn">Cancel</button>
+          <button id="clearBtn">Clear</button>
+        </div>
+        <div style="margin-top:8px" class="box">
+          <div>Run ID: <span id="runId">-</span></div>
+          <div>Status: <span id="status" class="badge">idle</span></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Live Status</h2>
+        <div class="meta">
+          <div class="box">Verdict: <span id="verdict">-</span></div>
+          <div class="box">Confidence: <span id="confidence">-</span></div>
+          <div class="box">Events: <span id="eventCount">0</span></div>
+          <div class="box">Sources: <span id="sourceCount">0</span></div>
+          <div class="box">Started: <span id="startedAt">-</span></div>
+          <div class="box">Checked: <span id="checkedAt">-</span></div>
+        </div>
+        <div class="row">
+          <div style="flex:1;min-width:0">
+            <h2>Event Stream</h2>
+            <div id="log" class="log"></div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <h2>Final Result JSON</h2>
+            <div id="finalJson" class="json">{}</div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <section class="panel" style="margin-top:12px">
+      <h2>All Events (Raw)</h2>
+      <table>
+        <colgroup>
+          <col style="width:4%">
+          <col style="width:12%">
+          <col style="width:10%">
+          <col style="width:30%">
+          <col style="width:44%">
+        </colgroup>
+        <thead><tr><th>#</th><th>Agent</th><th>Status</th><th>Message</th><th>Data</th></tr></thead>
+        <tbody id="eventTable"></tbody>
+      </table>
+    </section>
+  </div>
+  <script>
+    const claimEl = document.getElementById('claim');
+    const inputTypeEl = document.getElementById('inputType');
+    const cacheEl = document.getElementById('cacheMode');
+    const startBtn = document.getElementById('startBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const runIdEl = document.getElementById('runId');
+    const statusEl = document.getElementById('status');
+    const verdictEl = document.getElementById('verdict');
+    const confidenceEl = document.getElementById('confidence');
+    const sourceCountEl = document.getElementById('sourceCount');
+    const eventCountEl = document.getElementById('eventCount');
+    const startedAtEl = document.getElementById('startedAt');
+    const checkedAtEl = document.getElementById('checkedAt');
+    const logEl = document.getElementById('log');
+    const finalJsonEl = document.getElementById('finalJson');
+    const eventTableEl = document.getElementById('eventTable');
+
+    let runId = "";
+    let pollTimer = null;
+    let seen = 0;
+
+    function esc(v){
+      return String(v ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#39;");
+    }
+
+    function statusClass(s){
+      s=(s||'').toLowerCase();
+      if(['completed'].includes(s)) return 'ok';
+      if(['failed','error','cancelled'].includes(s)) return 'bad';
+      if(['running','started','queued','retry'].includes(s)) return 'run';
+      return 'warn';
+    }
+
+    function setStatus(s){
+      statusEl.textContent = s || 'idle';
+      statusEl.className = `badge ${statusClass(s)}`;
+    }
+
+    function appendLog(line, css=''){
+      const div = document.createElement('div');
+      div.className = `logline`;
+      div.innerHTML = line;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function appendEventCard(idx, e){
+      const wrap = document.createElement('div');
+      wrap.className = `event-card ${statusClass(e.status)}`;
+      wrap.innerHTML = `
+        <div><span class="agent">#${String(idx).padStart(2,'0')} ${e.agent || 'System'}</span> <span class="badge ${statusClass(e.status)}">${e.status || 'n/a'}</span></div>
+        <div class="meta">${e.message || ''}</div>
+      `;
+      logEl.appendChild(wrap);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function rowClassByAgent(agent){
+      const a = String(agent || '').toLowerCase();
+      if(a.includes('input') || a.includes('intake') || a.includes('domain router')) return 'agent-intake';
+      if(a.includes('research') || a.includes('primary source') || a.includes('extractor') || a.includes('consistency') || a.includes('aggregator')) return 'agent-retrieval';
+      if(a.includes('source quality') || a.includes('scorer') || a.includes('filter')) return 'agent-scoring';
+      if(a.includes('moderator') || a.includes('comparator') || a.includes('skeptic')) return 'agent-decision';
+      if(a.includes('retriever') || a.includes('planner')) return 'agent-sub';
+      if(a.includes('system') || a.includes('cache') || a.includes('store') || a.includes('change log') || a.includes('trust stats')) return 'agent-system';
+      return '';
+    }
+
+    function clearAll(){
+      runId = "";
+      seen = 0;
+      if(pollTimer) clearInterval(pollTimer);
+      pollTimer = null;
+      runIdEl.textContent = '-';
+      setStatus('idle');
+      verdictEl.textContent = '-';
+      confidenceEl.textContent = '-';
+      sourceCountEl.textContent = '0';
+      eventCountEl.textContent = '0';
+      startedAtEl.textContent = '-';
+      checkedAtEl.textContent = '-';
+      logEl.textContent = '';
+      finalJsonEl.textContent = '{}';
+      eventTableEl.innerHTML = '';
+    }
+
+    async function poll(){
+      if(!runId) return;
+      try{
+        const evRes = await fetch(`/api/runs/${runId}/events`);
+        const evPayload = await evRes.json();
+        const events = evPayload.events || [];
+        eventCountEl.textContent = String(events.length);
+
+        for(let i=seen; i<events.length; i++){
+          const e = events[i];
+          appendEventCard(i+1, e);
+          const tr = document.createElement('tr');
+          tr.className = rowClassByAgent(e.agent);
+          const raw = esc(JSON.stringify(e.data||{}, null, 2));
+          const preview = esc(JSON.stringify(e.data||{}));
+          const msg = String(e.message || '');
+          tr.innerHTML = `
+            <td>${i+1}</td>
+            <td>${esc(e.agent||'')}</td>
+            <td>${esc(e.status||'')}</td>
+            <td><div class="msg-cell">${esc(msg)}</div></td>
+            <td>
+              <details class="raw-toggle">
+                <summary>Show data</summary>
+                <div class="raw-preview">${preview}</div>
+                <pre>${raw}</pre>
+              </details>
+            </td>`;
+          eventTableEl.appendChild(tr);
+        }
+        seen = events.length;
+
+        const stRes = await fetch(`/api/runs/${runId}/status`);
+        const st = await stRes.json();
+        setStatus(st.status);
+        if(st.started_at){ startedAtEl.textContent = new Date(st.started_at * 1000).toLocaleString(); }
+        if(st.checked_at){ checkedAtEl.textContent = new Date(st.checked_at * 1000).toLocaleString(); }
+
+        if(st.status === 'completed' || st.status === 'failed' || st.status === 'cancelled'){
+          const out = st.result || {};
+          verdictEl.textContent = out.verdict || st.status;
+          confidenceEl.textContent = String(out.confidence ?? 0);
+          sourceCountEl.textContent = String((out.sources || []).length);
+          finalJsonEl.textContent = JSON.stringify(st, null, 2);
+          clearInterval(pollTimer);
+          pollTimer = null;
+          appendLog(`<b>RUN ENDED</b> status=${st.status}`, statusClass(st.status));
+        }
+      }catch(err){
+        appendLog(`poll error: ${err.message || err}`, 'bad');
+      }
+    }
+
+    startBtn.onclick = async () => {
+      clearAll();
+      try{
+        const fd = new FormData();
+        fd.append('text', claimEl.value || '');
+        fd.append('input_type', inputTypeEl.value || 'text');
+        fd.append('cache_mode', cacheEl.value || 'off');
+        fd.append('force_live_recheck', '0');
+        const res = await fetch('/api/verify/start', { method:'POST', body:fd });
+        const data = await res.json();
+        if(!res.ok) throw new Error(JSON.stringify(data));
+        runId = data.run_id;
+        try{
+          localStorage.setItem('factlens_active_run', JSON.stringify({run_id:runId, started_at:Date.now(), source:'backend-live'}));
+        }catch{}
+        runIdEl.textContent = runId;
+        setStatus(data.status || 'running');
+        appendLog(`<b>RUN STARTED</b> run_id=${runId}`, 'run');
+        pollTimer = setInterval(poll, 700);
+        poll();
+      }catch(err){
+        setStatus('failed');
+        appendLog(`start failed: ${err.message || err}`, 'bad');
+      }
+    };
+
+    cancelBtn.onclick = async () => {
+      if(!runId) return;
+      try{
+        await fetch(`/api/runs/${runId}/cancel`, { method:'POST' });
+        appendLog(`cancel requested`, 'warn');
+      }catch(err){
+        appendLog(`cancel failed: ${err.message || err}`, 'bad');
+      }
+    };
+
+    clearBtn.onclick = clearAll;
+    function attachExternalRunIfAny(){
+      if(runId) return;
+      try{
+        const raw = localStorage.getItem('factlens_active_run');
+        if(!raw) return;
+        const obj = JSON.parse(raw || '{}');
+        if(!obj || !obj.run_id) return;
+        runId = String(obj.run_id);
+        runIdEl.textContent = runId;
+        setStatus('running');
+        appendLog(`<b>ATTACHED</b> run_id=${runId} (from another tab)`, 'run');
+        pollTimer = setInterval(poll, 700);
+        poll();
+      }catch{}
+    }
+    window.addEventListener('storage', (e)=>{
+      if(e.key === 'factlens_active_run'){
+        attachExternalRunIfAny();
+      }
+    });
+    clearAll();
+    attachExternalRunIfAny();
+  </script>
+</body>
+</html>

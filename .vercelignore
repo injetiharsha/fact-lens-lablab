@@ -1,0 +1,12 @@
+.venv
+data
+docs
+tests
+scripts
+tmp_*
+uvicorn_*.log
+*.zip
+*.pem
+*.sqlite3
+*.db
+__pycache__

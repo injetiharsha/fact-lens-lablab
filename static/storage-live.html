@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FactLens Stored Data Explorer</title>
+  <style>
+    :root{--bg:#050505;--panel:#0d0d0d;--line:#2a2a2a;--ink:#f4f4f4;--muted:#bdbdbd;--ok:#8dffb0;--warn:#ffd58a;--bad:#ffb0b0}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:Consolas,monospace}
+    .wrap{width:100%;padding:10px 12px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+    .top h1{font:700 20px/1.2 "Segoe UI",Arial;margin:0}
+    .top .links{display:flex;gap:10px}
+    .top a{color:#9fdfff;text-decoration:none}
+    .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    input,select,button{background:#070707;color:#fff;border:1px solid #333;border-radius:8px;padding:8px;font:12px Consolas}
+    button{cursor:pointer}
+    table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+    th,td{border-bottom:1px solid #262626;padding:6px;vertical-align:top;text-align:left}
+    th{color:#cfcfcf}
+    .stack{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .split{display:grid;grid-template-columns:45% 55%;gap:10px}
+    .json{max-height:320px;overflow:auto;border:1px solid #2c2c2c;border-radius:8px;background:#050505;padding:8px;white-space:pre-wrap}
+    .muted{color:var(--muted)}
+    .badge{
+      display:inline-block;
+      border:1px solid #444;
+      border-radius:999px;
+      padding:2px 8px;
+      font-size:11px;
+      white-space:normal;
+      overflow-wrap:anywhere;
+      word-break:break-word;
+      max-width:100%;
+      line-height:1.2;
+    }
+    td{overflow:hidden}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+    @media (max-width: 980px){ .stack,.split{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>FactLens Stored Data Explorer</h1>
+      <div class="links">
+        <a href="/workflow.html">Workflow</a>
+        <a href="/backend-live.html">Backend Live</a>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="row">
+        <input id="q" placeholder="Search claim text" style="flex:1;min-width:220px">
+        <select id="verdict">
+          <option value="">All verdicts</option>
+          <option value="supported">supported</option>
+          <option value="refuted">refuted</option>
+          <option value="insufficient_evidence">insufficient_evidence</option>
+          <option value="needs_live_evidence">needs_live_evidence</option>
+        </select>
+        <select id="recency">
+          <option value="all">All time</option>
+          <option value="1h">Last 1 hour</option>
+          <option value="24h" selected>Last 24 hours</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 90 days</option>
+        </select>
+        <select id="limit">
+          <option value="100">100</option>
+          <option value="200" selected>200</option>
+          <option value="500">500</option>
+          <option value="1000">1000</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;color:#ddd;font-size:12px;">
+          <input id="includePartial" type="checkbox"> include partial runs
+        </label>
+        <button id="loadBtn">Load Runs</button>
+      </div>
+      <div class="muted" id="meta" style="margin-top:8px">No data loaded.</div>
+    </section>
+
+    <section class="split" style="margin-top:10px">
+      <section class="panel">
+        <h3 style="margin:0 0 8px">Live Runs (In-Memory)</h3>
+        <table>
+          <colgroup>
+            <col style="width:32%">
+            <col style="width:18%">
+            <col style="width:25%">
+            <col style="width:25%">
+          </colgroup>
+          <thead><tr><th>Run ID</th><th>Status</th><th>Started</th><th>Elapsed</th></tr></thead>
+          <tbody id="liveRunsT"></tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h3 style="margin:0 0 8px">Stored Runs (SQLite)</h3>
+        <table>
+          <colgroup>
+            <col style="width:18%">
+            <col style="width:14%">
+            <col style="width:8%">
+            <col style="width:10%">
+            <col style="width:12%">
+            <col style="width:38%">
+          </colgroup>
+          <thead><tr><th>Run ID</th><th>Verdict</th><th>Conf</th><th>Input</th><th>Ended</th><th>Claim</th></tr></thead>
+          <tbody id="runsT"></tbody>
+        </table>
+      </section>
+    </section>
+
+    <section class="stack">
+      <section class="panel">
+        <h3 style="margin:0 0 8px">Run Detail</h3>
+        <div id="runJson" class="json">{}</div>
+      </section>
+      <section class="panel">
+        <h3 style="margin:0 0 8px">Evidence + Events</h3>
+        <div id="detailJson" class="json">{}</div>
+      </section>
+    </section>
+  </div>
+
+  <script>
+    const q=document.getElementById('q');
+    const verdict=document.getElementById('verdict');
+    const recency=document.getElementById('recency');
+    const limit=document.getElementById('limit');
+    const loadBtn=document.getElementById('loadBtn');
+    const includePartial=document.getElementById('includePartial');
+    const liveRunsT=document.getElementById('liveRunsT');
+    const runsT=document.getElementById('runsT');
+    const runJson=document.getElementById('runJson');
+    const detailJson=document.getElementById('detailJson');
+    const meta=document.getElementById('meta');
+
+    function fmtTs(ts){ if(!ts) return '-'; try{return new Date(ts*1000).toLocaleString()}catch{return String(ts)} }
+
+    async function loadLiveRuns(){
+      liveRunsT.innerHTML='';
+      try{
+        const r=await fetch('/api/runs/live');
+        const j=await r.json();
+        for(const row of (j.runs||[])){
+          const tr=document.createElement('tr');
+          tr.innerHTML=`<td>${row.run_id}</td>
+                        <td><span class="badge warn">${row.status||'-'}</span></td>
+                        <td>${fmtTs(row.started_at)}</td>
+                        <td>${row.elapsed_sec ?? '-'}s</td>`;
+          liveRunsT.appendChild(tr);
+        }
+        if((j.count||0)===0){
+          const tr=document.createElement('tr');
+          tr.innerHTML='<td colspan="4" class="muted">No live runs.</td>';
+          liveRunsT.appendChild(tr);
+        }
+      }catch(err){
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td colspan="4" class="bad">Live API error: ${String(err && err.message || err)}</td>`;
+        liveRunsT.appendChild(tr);
+      }
+    }
+
+    async function loadRuns(){
+      runsT.innerHTML='';
+      runJson.textContent='{}';
+      detailJson.textContent='{}';
+      try{
+        const u=new URL('/api/storage/runs', location.origin);
+        if(q.value.trim()) u.searchParams.set('q', q.value.trim());
+        if(verdict.value) u.searchParams.set('verdict', verdict.value);
+        if(recency.value) u.searchParams.set('recency', recency.value);
+        u.searchParams.set('include_partial', includePartial.checked ? '1' : '0');
+        u.searchParams.set('limit', limit.value);
+        const r=await fetch(u);
+        const j=await r.json();
+        meta.textContent=`Loaded ${j.count||0} runs | DB: ${j.db_path||'n/a'}`;
+        for(const row of (j.runs||[])){
+          const tr=document.createElement('tr');
+          const v=String(row.verdict||'').toLowerCase();
+          const vc=v==='refuted'?'bad':(v==='supported'?'ok':'warn');
+          tr.innerHTML=`<td><a href="#" data-run="${row.run_id}">${row.run_id}</a></td>
+                        <td><span class="badge ${vc}">${row.verdict||'-'}</span></td>
+                        <td>${row.confidence ?? '-'}</td>
+                        <td>${row.input_type||'-'}</td>
+                        <td>${fmtTs(row.ended_at||row.started_at)}</td>
+                        <td>${(row.claim_raw||row.claim_normalized||'').replaceAll('<','&lt;')}</td>`;
+          runsT.appendChild(tr);
+        }
+      }catch(err){
+        meta.textContent = `Storage API error: ${String(err && err.message || err)}`;
+      }
+      runsT.querySelectorAll('a[data-run]').forEach(a=>{
+        a.addEventListener('click', async (e)=>{
+          e.preventDefault();
+          const runId=a.getAttribute('data-run');
+          const rr=await fetch(`/api/storage/run/${runId}`);
+          const rj=await rr.json();
+          runJson.textContent=JSON.stringify(rj.run||{}, null, 2);
+          detailJson.textContent=JSON.stringify({evidence:rj.evidence||[], events:rj.events||[]}, null, 2);
+        });
+      });
+    }
+
+    async function refreshAll(){
+      await Promise.all([loadLiveRuns(), loadRuns()]);
+    }
+
+    loadBtn.onclick=refreshAll;
+    setInterval(loadLiveRuns, 2000);
+    refreshAll();
+  </script>
+</body>
+</html>

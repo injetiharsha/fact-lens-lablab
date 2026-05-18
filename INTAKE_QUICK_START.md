@@ -1,3 +1,10 @@
+## Documentation Sync Metadata
+
+- Last Updated: 2026-05-18 18:43:15 +05:30
+- Current Commit: 8972a91
+- Latest Smoke Test: PASS (runner OK), verdict=insufficient_evidence, confidence=25%
+
+---
 # FactLens Intake Agent - Quick Reference Guide
 
 ## What Was Done
@@ -269,3 +276,4 @@ See detailed docs:
 - `INTAKE_AGENT_REFINEMENT.md` - Technical deep-dive
 - `docs/INTAKE_REFINEMENT_REPORT.md` - Results & validation
 - `COMPLETION_SUMMARY.md` - Full project summary
+

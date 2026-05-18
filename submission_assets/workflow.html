@@ -8,9 +8,18 @@
     :root { --bg:#000; --panel:#070707; --ink:#fff; --muted:#d0d0d0; --line:#2b2b2b; }
     * { box-sizing:border-box; }
     html,body { margin:0; width:100%; height:100%; background:#000; color:#fff; font-family:"Segoe UI",Arial,sans-serif; }
-    .app { width:100vw; height:100vh; display:grid; grid-template-columns:390px 1fr; overflow:hidden; }
-    .left { background:var(--panel); border-right:1px solid var(--line); overflow:auto; box-shadow: 0 0 36px rgba(68,150,255,.18), inset 0 0 24px rgba(68,150,255,.08); }
+    :root { --left-w: 390px; }
+    .app { width:100vw; height:100vh; display:grid; grid-template-columns:390px 1fr; overflow:hidden; position:relative; }
+    .app.collapsed { grid-template-columns:390px 1fr; }
+    .left { position:relative; left:0; top:0; width:390px; height:100vh; max-height:100vh; display:block; z-index:25; background:linear-gradient(180deg,#050b14,#070707 45%,#050a10); border-right:1px solid #1e2a3a; overflow:auto; box-shadow: inset -8px 0 24px rgba(68,150,255,.08); }
+    .left.open { display:block; }
+    .resizer { display:none; }
+    .resizer:hover { background:#1a1a1a; }
     .sec { padding:14px; border-bottom:1px solid var(--line); }
+    .form-grid{display:grid;gap:8px;}
+    .field{display:flex;flex-direction:column;gap:6px;}
+    .field label{font:12px "Consolas",monospace;color:#d8e6ff;}
+    .hint{font:11px "Consolas",monospace;color:#9fb4d5;}
     .eyebrow { margin:0 0 8px; font:700 11px "Consolas",monospace; letter-spacing:.12em; text-transform:uppercase; }
     h1{margin:0 0 8px;font-size:22px;} h2{margin:0 0 8px;font-size:16px;} p{margin:0;color:var(--muted);line-height:1.45;}
     textarea{width:100%;min-height:96px;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:#000;color:#fff;padding:10px;font:13px/1.45 "Consolas",monospace;}
@@ -86,7 +95,21 @@
     .verdict{position:absolute;right:18px;bottom:74px;z-index:5;border:1px solid #444;border-radius:10px;padding:8px 10px;background:#050505;font:12px "Consolas",monospace;min-width:320px;box-shadow:0 0 20px rgba(118,187,255,.20), 0 12px 22px rgba(76,155,255,.16);}
     .total{position:absolute;right:18px;top:18px;z-index:5;border:1px solid #444;border-radius:10px;padding:8px 10px;background:#050505;font:12px "Consolas",monospace;box-shadow:0 0 20px rgba(118,187,255,.20), 0 12px 22px rgba(76,155,255,.16);}
     .mode{position:absolute;right:18px;top:66px;z-index:5;}
+    .overlay-nav{display:none;}
+    .side-toggle{display:none;}
+    .left-top{display:flex;justify-content:flex-end;margin-bottom:8px;}
+    .app:not(.collapsed) #panelToggle{display:none;}
+    .app.collapsed #panelToggleIn{display:none;}
+    .world-panel{position:absolute;width:920px;background:linear-gradient(180deg,#050b14,#070707 45%,#050a10);border:1px solid #1e2a3a;border-radius:12px;overflow:auto;box-shadow:0 0 36px rgba(68,150,255,.18), inset 0 0 24px rgba(68,150,255,.08);display:none;}
+    .world-panel .sec{border-bottom:1px solid #1a2432;}
+    .world-panel .sec:last-child{border-bottom:0;}
+    #inputWorldPanel{left:120px;top:3000px;max-height:1040px;}
+    #metaWorldPanel{left:1120px;top:3000px;width:1220px;max-height:1220px;}
     .hover-card{position:fixed;display:none;z-index:40;max-width:500px;background:#050505;border:1px solid #3b3b3b;border-radius:12px;padding:14px;box-shadow:0 0 26px rgba(118,187,255,.20), 0 12px 26px rgba(0,0,0,.45);}
+    .io-panel{position:fixed;right:16px;top:160px;z-index:45;display:none;width:min(720px,46vw);max-height:68vh;overflow:auto;background:#060606;border:1px solid #3b3b3b;border-radius:12px;padding:14px;box-shadow:0 0 26px rgba(118,187,255,.20), 0 12px 26px rgba(0,0,0,.45);}
+    .io-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+    .io-head h3{margin:0;font-size:16px;}
+    .io-box{border:1px solid #2f2f2f;border-radius:10px;background:#020202;padding:10px;max-height:220px;overflow:auto;font:12px/1.35 "Consolas",monospace;color:#ddd;white-space:pre-wrap;}
     .hover-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
     .hover-head .n8n-logo{width:34px;height:34px;}
     .hover-card h3{margin:0;font-size:18px;} .hover-card p{margin:0 0 8px;color:#ddd;font-size:13px;line-height:1.45;}
@@ -100,14 +123,19 @@
 </head>
 <body>
   <main class="app">
-    <aside class="left">
-      <section class="sec"><p class="eyebrow">Collaborative Systems</p><h1>FactLens Workflow Map</h1><p>Expanded mesh + local logos + detailed hover.</p></section>
-      <section class="sec"><h2>Run Claim</h2><textarea id="claim">India is the 4th largest economy in 2026</textarea><div class="row"><select id="inputKind" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="text">Text</option><option value="image">Image (OCR)</option><option value="pdf">PDF</option></select><input id="wfFile" type="file" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:8px;font:12px Consolas,monospace;"></div><div class="row"><select id="cacheMode" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="off">Cache: Off (no read/no write)</option><option value="read">Cache: Read only</option><option value="write">Cache: Write only</option><option value="read_write">Cache: Read + Write</option><option value="update">Cache: Update</option><option value="auto">Cache: Auto</option></select></div><div class="row" style="align-items:center;"><label style="font:12px Consolas,monospace;color:#ddd;display:flex;gap:8px;align-items:center;"><input type="checkbox" id="forceRecheck" /> Force live recheck (ignore cache hit)</label></div><div class="row"><button id="run" class="run">Run Workflow</button><button id="cancelRun">Cancel Analysis</button><button id="reset">Reset</button></div><div class="row"><a href="/backend-live.html" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;border:1px solid #2b2b2b;border-radius:10px;background:#111;color:#fff;padding:8px 10px;font:700 12px Consolas,monospace;text-transform:uppercase;">Open Backend Live</a><a href="/storage-live.html" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;border:1px solid #2b2b2b;border-radius:10px;background:#111;color:#fff;padding:8px 10px;font:700 12px Consolas,monospace;text-transform:uppercase;">Open Stored Data</a></div><div id="summary" class="kv">Status: idle</div><div id="formatSummary" class="kv">Evidence formats: canonical schema active (awaiting run).</div></section>
-      <section class="sec"><h2>Step Details</h2><div id="inspector" class="kv">Select node.</div></section>
-      <section class="sec"><h2>Workflow History</h2><div id="timeline" class="timeline">Waiting for run...</div></section>
+    <aside id="leftPanel" class="left">
+      <section class="sec" id="headSec"><p class="eyebrow">Collaborative Systems</p><h1>FactLens Workflow Map</h1><p>Expanded mesh + local logos + detailed hover.</p></section>
+      <section class="sec" id="runSec"><h2>Run Claim</h2><div class="form-grid"><div class="field"><label for="claim">Claim / Context</label><textarea id="claim">India is the 4th largest economy in 2026</textarea></div><div class="row"><select id="inputKind" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="text">Text</option><option value="image">Image (OCR)</option><option value="pdf">PDF</option></select><input id="wfFile" type="file" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:8px;font:12px Consolas,monospace;"></div><div class="row"><div class="field" style="flex:1;"><label for="pdfPages">PDF pages</label><input id="pdfPages" type="text" value="1-5" placeholder="1,3,5-7" style="border:1px solid #2b2b2b;border-radius:8px;background:#000;color:#fff;padding:8px;font:12px Consolas,monospace;"><div class="hint">Format: 1 | 1-4 | 1,3,5-7</div></div><select id="cacheMode" style="width:210px;min-width:210px;max-width:210px;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="off">Cache: Off</option><option value="on">Cache: On</option></select></div><div class="row" style="align-items:center;"><label style="font:12px Consolas,monospace;color:#ddd;display:flex;gap:8px;align-items:center;"><input type="checkbox" id="forceRecheck" /> Force live recheck</label></div><div class="row"><button id="run" class="run">Run Workflow</button><button id="cancelRun">Cancel Analysis</button><button id="reset">Reset</button></div><div id="summary" class="kv">Status: idle</div><div id="formatSummary" class="kv">Evidence formats: canonical schema active (awaiting run).</div></div></section>
+      <section class="sec" id="detailsSec"><h2>Step Details</h2><div id="inspector" class="kv">Select node.</div></section>
+      <section class="sec" id="historySec"><h2>Workflow History</h2><div id="timeline" class="timeline">Waiting for run...</div></section>
     </aside>
+    <div id="leftResizer" class="resizer" title="Drag to resize panel"></div>
     <section id="canvas" class="canvas">
-      <div id="world"><svg id="edges" viewBox="0 0 14600 7600"></svg></div>
+      <div id="world">
+        <svg id="edges" viewBox="0 0 14600 7600"></svg>
+        <div id="inputWorldPanel" class="world-panel"></div>
+        <div id="metaWorldPanel" class="world-panel"></div>
+      </div>
       <div id="totalTimer" class="total">Total: 00:00.0</div>
       <div class="mode"><button id="fullBtn">Full Pipeline</button></div>
       <div class="mode" style="top:114px;"><button id="devBtn">Dev: Off</button></div>
@@ -132,36 +160,76 @@
     </div>
   </div>
   <div id="hoverCard" class="hover-card"></div>
+  <div id="ioPanel" class="io-panel">
+    <div class="io-head">
+      <h3 id="ioTitle">Node I/O</h3>
+      <button id="ioClose">Close</button>
+    </div>
+    <div id="ioTabs" class="row" style="margin:0 0 8px 0;"></div>
+    <div class="hover-sec"><h4>Input (saved)</h4><div id="ioInput" class="io-box">N/A</div></div>
+    <div class="hover-sec"><h4>Output (saved)</h4><div id="ioOutput" class="io-box">N/A</div></div>
+  </div>
   <script>
     const LOGO = (n) => `/assets/logos/${n}`;
     const AGENT_INFO = {
-      "System": { role:"Orchestrator + run lifecycle", explain:"Controls execution timeline and event stream.", rules:["Ordered events","One bounded retry","No fabricated verdict"], apis:["FastAPI","Python runtime","Run Store"], outputs:["run_id","events","status"], logos:[["FastAPI",LOGO("fastapi.svg")],["Python",LOGO("python.svg")]] },
-      "Intake Agent": { role:"Claim extraction", explain:"Builds one checkable claim from input text/file.", rules:["Normalize text","Checkability gate","No ambiguity carry"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["claim","checkable","topic"], logos:[["Gemini",LOGO("gemini.svg")],["Google",LOGO("google.svg")]] },
-      "Domain Router Agent": { role:"Route selection", explain:"Chooses domain-aware retrieval route.", rules:["Semantic route","No verdict logic"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["domain route","claim mode"], logos:[["Gemini",LOGO("gemini.svg")]] },
-      "Web Research Agent": { role:"Broad web retrieval", explain:"Finds contextual evidence from web index providers.", rules:["Cited URL only","Blacklist filter"], apis:["Google CSE API","DuckDuckGo","Tavily (optional)"], outputs:["web evidence"], logos:[["Web",LOGO("search-logo.webp")],["Google",LOGO("google.svg")],["DuckDuckGo",LOGO("duckduckgo.svg")]] },
-      "Primary Source Agent": { role:"High-trust retrieval", explain:"Targets institutional/official sources.", rules:["Prefer gov/edu/org","Prioritize reference/trusted"], apis:["Google CSE API","World Bank"], outputs:["trusted evidence"], logos:[["Web",LOGO("search-logo.webp")],["Trusted",LOGO("worldbank.svg")],["Google",LOGO("google.svg")]] },
-      "Data Extractor Agent": { role:"Claim-driven extraction", explain:"Extracts comparable facts from API + pages and normalizes mixed records.", rules:["Preserve provenance","Extract structured fields","Normalize to canonical EvidenceItem"], apis:["World Bank API","Scraper"], outputs:["api_data/web_scrape evidence"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
-      "Tri Consistency Agent": { role:"Cross-channel consistency", explain:"Measures overlap among trio channels.", rules:["Penalty on drift","Emit consistency score"], apis:["Local scorer"], outputs:["consistency"], logos:[["Python",LOGO("python.svg")],["Python",LOGO("python.svg")]] },
-      "Evidence Aggregator Agent": { role:"Consistency-aware aggregation", explain:"Balanced merge across channels into one canonical evidence schema.", rules:["Channel caps","Diversity retention","Normalize mixed formats"], apis:["Local aggregator"], outputs:["raw evidence pool (canonical)"], logos:[["JSON",LOGO("json-logo.png")],["Table",LOGO("databricks.svg")],["Web",LOGO("search-logo.webp")]] },
+      "System": { name:"System Orchestrator", role:"Orchestrator + run lifecycle", explain:"Controls execution order, retries, cancellation, and run events.", rules:["Strict stage ordering","Single bounded retry loop","No final verdict in orchestrator"], details:["Creates run_id/session_id and timestamps","Streams started/completed/retry/error events"], apis:["FastAPI","Python runtime","Run Store"], outputs:["run_id","events","status"], logos:[["FastAPI",LOGO("fastapi.svg")],["Python",LOGO("python.svg")]] },
+      "Intake Agent": { role:"Claim extraction", explain:"Builds one normalized, checkable claim from text/OCR/PDF input.", rules:["Normalize text and entities","Checkability gate","Emit structured JSON only"], details:["Extracts claim/topic/checkable fields","Passes claim metadata to router and memory"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["claim","checkable","topic"], logos:[["Gemini",LOGO("gemini.svg")],["Google",LOGO("google.svg")]] },
+      "Domain Router Agent": { role:"Route selection", explain:"Chooses retrieval strategy based on claim semantics.", rules:["Route by domain + claim type","No verdicting","No source fabrication"], details:["Selects economy/science/general route","Sets retrieval intensity and source mix"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["domain route","claim mode"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "Web Research Agent": { name:"Web Retrieval Agent", role:"Broad web retrieval", explain:"Finds contextual evidence from web index providers.", rules:["Cited URL only","Blacklist filter"], details:["Channel: web_search/google_search_api","Returns title/url/snippet records"], apis:["Google CSE API","DuckDuckGo","Tavily (optional)"], outputs:["web evidence"], logos:[["Web",LOGO("search-logo.webp")],["Google",LOGO("google.svg")],["DuckDuckGo",LOGO("duckduckgo.svg")]] },
+      "Primary Source Agent": { name:"Primary Evidence Agent", role:"High-trust retrieval", explain:"Targets institutional/official sources.", rules:["Prefer gov/edu/org","Prioritize reference/trusted"], details:["Domain-tier prioritization","Avoids low-trust social domains"], apis:["Google CSE API","World Bank"], outputs:["trusted evidence"], logos:[["Web",LOGO("search-logo.webp")],["Trusted",LOGO("worldbank.svg")],["Google",LOGO("google.svg")]] },
+      "Data Extractor Agent": { role:"Claim-driven extraction", explain:"Extracts comparable numeric/factual fields from APIs and scraped pages.", rules:["Preserve provenance","Extract typed fields","Normalize to canonical EvidenceItem"], details:["Handles mixed formats: JSON, HTML text, snippets","Builds comparable assertions for numeric comparator"], apis:["World Bank API","Trafilatura","Selenium/Playwright"], outputs:["api_data/web_scrape evidence"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
+      "Tri Consistency Agent": { role:"Cross-channel consistency", explain:"Measures agreement/disagreement across Web, Primary, and Extractor channels.", rules:["Penalize high contradiction","Reward independent agreement"], details:["Computes consistency score from overlap and conflict","Flags low-consistency evidence blocks"], apis:["Local scorer"], outputs:["consistency"], logos:[["Python",LOGO("python.svg")]] },
+      "Evidence Aggregator Agent": { role:"Consistency-aware aggregation", explain:"Merges evidence from all channels into canonical schema before scoring.", rules:["Per-channel caps","Deduplicate by URL/domain","Retain provenance"], details:["Canonical fields: url/domain/title/snippet/date/source_type","Preserves tool_channel for downstream audit"], apis:["Local aggregator"], outputs:["raw evidence pool (canonical)"], logos:[["JSON",LOGO("json-logo.png")],["Web",LOGO("search-logo.webp")]] },
       "Skeptic Agent": { role:"Counter-checks", explain:"Challenges weak/contradictory evidence.", rules:["No assumption","Escalate uncertainty"], apis:["Featherless model (FEATHERLESS_MODEL)","Gemini fallback"], outputs:["objections"], logos:[["Featherless",LOGO("featherless.png")],["ChatGPT",LOGO("chatgpt-logo.webp")],["Gemini",LOGO("gemini.svg")]] },
-      "Source Quality Agent": { role:"Deterministic scoring", explain:"Applies relevance/credibility/recency/diversity rules.", rules:["Credibility x relevance x temporal","Domain cap + blacklist"], apis:["Rule engine"], outputs:["audited evidence pool"], logos:[["Python",LOGO("python.svg")],["Python",LOGO("python.svg")]] },
-      "Stat Comparator Agent": { role:"Evidence-vs-claim compare", explain:"Strict compare from provided evidence only.", rules:["No assumptions","JSON-only structured compare"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["comparator verdict"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "Source Quality Agent": { role:"Deterministic scoring", explain:"Applies deterministic guardrails to accept/reject evidence.", rules:["EW = relevance * credibility_weight * temporal_weight","Domain cap + blacklist","Reject below threshold"], details:["Relevance: 0.00-1.00","Temporal weight: 0.40-1.00","Diversity penalties applied per repeated root domain"], apis:["Rule engine"], outputs:["audited evidence pool"], logos:[["Python",LOGO("python.svg")]] },
+      "Stat Comparator Agent": { name:"Numeric Verification Agent", role:"Evidence-vs-claim compare", explain:"Strict compare from provided evidence only.", rules:["No assumptions","JSON-only structured compare"], details:["Output verdict in {supported,refuted,insufficient_evidence}","Confidence integer 0-100"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["comparator verdict"], logos:[["Gemini",LOGO("gemini.svg")]] },
       "Consensus Moderator Agent": { role:"Final arbitration", explain:"Produces final verdict and confidence under guardrails.", rules:["Obey quality/comparator gates","Insufficient when uncertain"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["verdict","confidence","explanation"], logos:[["Gemini",LOGO("gemini.svg")]] },
-      "Cache Policy Node": { role:"Cache mode gate", explain:"Applies per-run cache mode: off/read/write/read_write/update/auto.", rules:["Read mode may return cached result","Write mode persists run/evidence only","Auto picks read/update/write"], apis:["CACHE_MODE override"], outputs:["cache decision"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
-      "Similar Claims Node": { role:"Similarity retrieval", explain:"Finds semantically similar past claims for retrieval bootstrap.", rules:["Token-overlap threshold","Top-K similar runs"], apis:["SQLite memory store"], outputs:["similar_claims"], logos:[["Search",LOGO("search-logo.webp")],["JSON",LOGO("json-logo.png")]] },
-      "Run Store Node": { role:"Structured run persistence", explain:"Stores run_id, session_id, timings, evidence, and events.", rules:["Append run history","Persist evidence metadata"], apis:["SQLite run store"], outputs:["runs/evidence/events rows"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
-      "Change Log Node": { role:"Drift changelog", explain:"Tracks what changed vs nearest historical claims and why.", rules:["Detect verdict drift","Track source-domain changes"], apis:["SQLite change_log"], outputs:["what_changed","why_changed"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
-      "Trust Stats Node": { role:"Trust calibration memory", explain:"Updates per-domain trust stats from each run.", rules:["Aggregate credibility stats","Persist root-domain trends"], apis:["SQLite trust_stats"], outputs:["domain trust updates"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
-      "Relevance Scorer": { role:"Sub-agent", explain:"Scores query-evidence semantic match.", rules:["Local deterministic score"], apis:["Rule engine"], outputs:["relevance"], logos:[["Python",LOGO("python.svg")]] },
-      "Temporal Scorer": { role:"Sub-agent", explain:"Applies age/recency weight.", rules:["Temporal weight policy"], apis:["Rule engine"], outputs:["temporal weight"], logos:[["Python",LOGO("python.svg")]] },
-      "Diversity Filter": { role:"Sub-agent", explain:"Penalizes source duplication and over-reliance.", rules:["Root domain cap"], apis:["Rule engine"], outputs:["diversity penalty"], logos:[["Python",LOGO("python.svg")]] },
-      "Query Planner": { role:"Sub-agent", explain:"Builds route-aware query variants.", rules:["No verdicting"], apis:["Gemini"], outputs:["query set"], logos:[["Python",LOGO("python.svg")]] },
+      "Cache Policy Node": { role:"Cache mode gate", explain:"Applies run cache policy before/after live retrieval.", rules:["off: no read/no write","read: read only","write/read_write/update/auto: persist new run"], details:["Force live recheck bypasses cache hit","Emits policy decision to Similar Claims/Store nodes"], apis:["CACHE_MODE override"], outputs:["cache decision","cache hit/miss"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
+      "Similar Claims Node": { role:"Similarity retrieval", explain:"Retrieves nearest historical claims to bootstrap retrieval prompts.", rules:["Top-K by similarity score","Keep history provenance separate from live"], details:["Compares normalized claim hash + embeddings/tokens","Returns similar claim ids and best prior evidence"], apis:["SQLite memory store"], outputs:["similar_claims"], logos:[["Search",LOGO("search-logo.webp")],["JSON",LOGO("json-logo.png")]] },
+      "Run Store Node": { role:"Structured run persistence", explain:"Persists each run with timing, claim, verdict, evidence, and events.", rules:["Append-only run history","Store canonical evidence records"], details:["Writes run/session metadata","Stores evidence formats safely as normalized JSON"], apis:["SQLite run store"], outputs:["runs/evidence/events rows"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
+      "Change Log Node": { role:"Drift changelog", explain:"Captures why verdict/confidence changed across similar claims.", rules:["Compare against nearest historical runs","Record source and score deltas"], details:["Tracks what_changed and why_changed","Supports audit trail for cache updates"], apis:["SQLite change_log"], outputs:["what_changed","why_changed"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
+      "Trust Stats Node": { role:"Trust calibration memory", explain:"Updates rolling trust statistics for root domains and channels.", rules:["Aggregate per-domain credibility over runs","Never override current run verdict"], details:["Stores trust trend metrics","Feeds future credibility calibration"], apis:["SQLite trust_stats"], outputs:["domain trust updates"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
+      "Relevance Scorer": { role:"Scoring Sub-agent", explain:"Scores query-evidence semantic match.", rules:["Local deterministic score"], details:["Range: 0.00 - 1.00","Higher means stronger claim match"], apis:["Rule engine"], outputs:["relevance"], logos:[["Python",LOGO("python.svg")]] },
+      "Temporal Scorer": { role:"Scoring Sub-agent", explain:"Applies age/recency weight.", rules:["Temporal weight policy"], details:["Range: 0.40 - 1.00","Historical/science facts can keep 1.00"], apis:["Rule engine"], outputs:["temporal weight"], logos:[["Python",LOGO("python.svg")]] },
+      "Diversity Filter": { role:"Scoring Sub-agent", explain:"Penalizes source duplication and over-reliance.", rules:["Root domain cap"], details:["1st same-domain source x1.00","2nd x0.70, 3rd x0.50"], apis:["Rule engine"], outputs:["diversity penalty"], logos:[["Python",LOGO("python.svg")]] },
+      "Query Planner": { role:"Sub-agent", explain:"Builds route-aware query variants for each retrieval channel.", rules:["No verdicting","Emit query list only"], details:["Expands entities/time constraints","Adds tie-break query for retry"], apis:["Gemini 2.5 Flash"], outputs:["query set"], logos:[["Python",LOGO("python.svg")]] },
       "API Retriever": { role:"Sub-agent", explain:"Executes API retrieval path.", rules:["Preserve response provenance"], apis:["World Bank API"], outputs:["api rows"], logos:[["API",LOGO("api-logo.webp")]] },
       "Scrape Retriever": { role:"Sub-agent", explain:"Executes deep scrape path.", rules:["Text extract + sanitize"], apis:["Scraper"], outputs:["scraped snippets"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
-      "Text Input Node": { role:"Input Sub-agent", explain:"Handles plain text claims.", rules:["Normalize text input","Strip noise"], apis:["FastAPI form"], outputs:["text payload"], logos:[["Python",LOGO("python.svg")]] },
-      "Image OCR Node": { role:"Input Sub-agent", explain:"Extracts text from images.", rules:["OCR extraction before intake","Preserve source type"], apis:["OCR/PyTesseract"], outputs:["ocr text"], logos:[["Tesseract OCR",LOGO("tesseract-ocr.jpg")]] },
-      "PDF Extract Node": { role:"Input Sub-agent", explain:"Extracts text from PDFs.", rules:["Parse PDF pages","Limit extraction budget"], apis:["PyMuPDF"], outputs:["pdf text"], logos:[["Python",LOGO("python.svg")]] },
+      "Text Input Node": { role:"Input Sub-agent", explain:"Handles plain-text claims and passes normalized payload to intake.", rules:["Normalize text input","Strip non-semantic noise"], details:["Activates only for text input mode","Single payload to Intake Agent"], apis:["FastAPI form"], outputs:["text payload"], logos:[["Python",LOGO("python.svg")]] },
+      "Image OCR Node": { role:"Input Sub-agent", explain:"Runs OCR to convert image content into claim text.", rules:["OCR before intake","Preserve input source metadata"], details:["Activates only for image input mode","Emits OCR text + source type"], apis:["PyTesseract OCR"], outputs:["ocr text"], logos:[["Tesseract OCR",LOGO("tesseract-ocr.jpg")]] },
+      "PDF Extract Node": { role:"Input Sub-agent", explain:"Extracts text from selected PDF pages and forwards to intake.", rules:["Respect page selector","Bound extraction budget"], details:["Supports ranges: 1-4,1,7","Activates only for PDF input mode"], apis:["PyMuPDF"], outputs:["pdf text"], logos:[["Python",LOGO("python.svg")]] },
     };
+    const AGENT_INPUTS = {
+      "System": ["Run request: claim text/file, input_type, cache_mode, force_live_recheck, pdf_pages"],
+      "Text Input Node": ["Raw text claim payload"],
+      "Image OCR Node": ["Image file bytes + metadata"],
+      "PDF Extract Node": ["PDF file bytes + page selector"],
+      "Intake Agent": ["Normalized input text from Text/OCR/PDF node"],
+      "Domain Router Agent": ["intake claim + topic + checkability"],
+      "Web Research Agent": ["route plan + query variants (+ similar-claims hints when available)"],
+      "Primary Source Agent": ["route plan + trusted-domain strategy (+ similar-claims hints when available)"],
+      "Data Extractor Agent": ["route plan + structured extraction intent (+ similar-claims hints when available)"],
+      "Query Planner": ["claim + route + retry intent"],
+      "API Retriever": ["planned API queries + constraints"],
+      "Scrape Retriever": ["URL list/query + extraction constraints"],
+      "Tri Consistency Agent": ["web evidence + trusted evidence + extracted evidence"],
+      "Evidence Aggregator Agent": ["all retrieval channel evidence + consistency signal"],
+      "Source Quality Agent": ["aggregated canonical evidence pool"],
+      "Relevance Scorer": ["canonical evidence item + normalized claim"],
+      "Temporal Scorer": ["evidence timestamp/age"],
+      "Diversity Filter": ["root-domain distribution across evidence"],
+      "Skeptic Agent": ["audited evidence + weak-claim candidates"],
+      "Stat Comparator Agent": ["claim assertions + numeric evidence slices"],
+      "Consensus Moderator Agent": ["audited evidence + skeptic notes + comparator result"],
+      "Cache Policy Node": ["cache_mode + force_live_recheck + claim hash"],
+      "Similar Claims Node": ["claim hash + normalized claim + retrieval seed request"],
+      "Run Store Node": ["run metadata + events + verdict + evidence"],
+      "Change Log Node": ["current run + nearest historical run(s)"],
+      "Trust Stats Node": ["current run domains + quality stats"]
+    };
+    Object.keys(AGENT_INFO).forEach((id)=>{
+      if(!AGENT_INFO[id].inputs) AGENT_INFO[id].inputs = AGENT_INPUTS[id] || ["Upstream node payload"];
+    });
     const MODELS = {
       flow1: [
         { id:"System", x:120, y:1850 },
@@ -304,8 +372,11 @@
       }
     };
 
-    const world=document.getElementById("world"), svg=document.getElementById("edges"), timeline=document.getElementById("timeline"), summary=document.getElementById("summary"), inspector=document.getElementById("inspector"), verdictBox=document.getElementById("verdict"), totalTimer=document.getElementById("totalTimer"), hoverCard=document.getElementById("hoverCard");
-    const cardById=new Map(), edgeByPair=new Map(), stateById=new Map(), timerByNode=new Map(), stepByNode=new Map();
+    const world=document.getElementById("world"), svg=document.getElementById("edges"), timeline=document.getElementById("timeline"), summary=document.getElementById("summary"), inspector=document.getElementById("inspector"), verdictBox=document.getElementById("verdict"), totalTimer=document.getElementById("totalTimer"), hoverCard=document.getElementById("hoverCard"), ioPanel=document.getElementById("ioPanel"), ioTitle=document.getElementById("ioTitle"), ioInput=document.getElementById("ioInput"), ioOutput=document.getElementById("ioOutput"), ioClose=document.getElementById("ioClose"), ioTabs=document.getElementById("ioTabs");
+    const appEl=document.querySelector(".app");
+    const runBtn=document.getElementById("run"), cancelBtn=document.getElementById("cancelRun");
+    const claimEl=document.getElementById("claim"), inputKindEl=document.getElementById("inputKind"), wfFileEl=document.getElementById("wfFile"), cacheModeEl=document.getElementById("cacheMode"), forceRecheckEl=document.getElementById("forceRecheck"), pdfPagesEl=document.getElementById("pdfPages");
+    const cardById=new Map(), edgeByPair=new Map(), stateById=new Map(), timerByNode=new Map(), stepByNode=new Map(), ioByNode=new Map();
     const RAG_NODES = new Set(["Cache Policy Node","Similar Claims Node","Run Store Node","Change Log Node","Trust Stats Node"]);
     const SUB_SYNTH = {
       "Web Research Agent": ["Query Planner"],
@@ -313,11 +384,12 @@
       "Data Extractor Agent": ["Scrape Retriever"],
       "Source Quality Agent": ["Relevance Scorer","Temporal Scorer","Diversity Filter"]
     };
-    let orderedEvents=[], stepCursor=-1, running=false, startMs=0, mode="flow1", prevEventAgent="", activeInputNode="Text Input Node", eventCounter=0, currentRunId="";
+    let orderedEvents=[], stepCursor=-1, running=false, startMs=0, mode="flow1", prevEventAgent="", activeInputNode="Text Input Node", eventCounter=0, currentRunId="", ioNodeOpen="", currentPass=1;
     let devMode=false, selectedNodeId="";
     const findNode=(id)=>MODELS[mode].find(x=>x.id===id);
     const cssId=(id)=>id.replace(/[^a-zA-Z0-9_-]/g,"_");
     const fmt=(ms)=>{const s=ms/1000;const m=Math.floor(s/60);const r=(s%60).toFixed(4).padStart(7,"0");return `${String(m).padStart(2,"0")}:${r}`;}
+    const esc=(v)=>String(v??"").replace(/[&<>'"]/g,(m)=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]));
     function statusClass(status){const s=(status||"").toLowerCase();if(s==="started")return"started";if(s==="running"||s==="file_extracted")return"running";if(s==="retry"||s==="needs_live_evidence")return"retry";if(s==="completed")return"completed";if(s==="failed"||s==="file_warning"||s==="error"||s==="cancelled")return"failed";return"ended";}
     function nodeStageClass(id){
       const input = new Set(["System","Text Input Node","Image OCR Node","PDF Extract Node","Intake Agent","Domain Router Agent"]);
@@ -447,17 +519,21 @@
     }
 
     function clearWorld(){cardById.clear();edgeByPair.clear();stateById.clear();timerByNode.clear();world.querySelectorAll(".node").forEach(n=>n.remove());svg.innerHTML="";}
+    let currentHoverId = null;
+    let lastHoverEvent = null;
     function renderNodes(){
       MODELS[mode].forEach(a=>{
-        const info=AGENT_INFO[a.id]||{role:a.id,explain:"",logos:[["agent",LOGO("vscode.svg")]]};
+        const info=AGENT_INFO[a.id]||{name:a.id,role:a.id,explain:"",logos:[["agent",LOGO("vscode.svg")]]};
         const icon=info.logos[0][1];
         const logos=(info.logos||[]).map(x=>`<img class="mini-logo" src="${x[1]}" title="${x[0]}" alt="${x[0]}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';">`).join("");
         const el=document.createElement("article");
         el.className=`node undiscovered ${a.sub?"sub":""} ${nodeStageClass(a.id)}`;
         el.style.left=`${a.x}px`; el.style.top=`${a.y}px`;
-        el.innerHTML=`<span class="stepmark" id="step-${cssId(a.id)}">-</span><div class="node-head"><span class="n8n-logo"><img src="${icon}" alt="${a.id}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span><h3>${a.id}</h3></div><p>${info.role}</p><div class="node-logos" id="logos-${cssId(a.id)}">${logos}</div><span class="state">waiting</span><div class="nmeta" id="nmeta-${cssId(a.id)}">00:00.0</div><div class="steplist" id="steplist-${cssId(a.id)}"></div>`;
-        el.onclick=()=>selectAgent(a.id);
-        el.onmouseenter=(e)=>showHover(a.id,e); el.onmousemove=(e)=>moveHover(e); el.onmouseleave=hideHover;
+        el.innerHTML=`<span class="stepmark" id="step-${cssId(a.id)}">-</span><div class="node-head"><span class="n8n-logo"><img src="${icon}" alt="${a.id}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span><h3>${info.name||a.id}</h3></div><p>${info.role}</p><div class="node-logos" id="logos-${cssId(a.id)}">${logos}</div><span class="state">waiting</span><div class="nmeta" id="nmeta-${cssId(a.id)}">00:00.0</div><div class="steplist" id="steplist-${cssId(a.id)}"></div>`;
+        el.onclick=()=>{selectAgent(a.id); toggleIoPanel(a.id);};
+        el.onmouseenter=(e)=>{ currentHoverId=a.id; lastHoverEvent=e; showHover(a.id,e); };
+        el.onmousemove=(e)=>{ lastHoverEvent=e; moveHover(e); };
+        el.onmouseleave=()=>{ currentHoverId=null; lastHoverEvent=null; hideHover(); };
         world.appendChild(el);
         cardById.set(a.id,el); stateById.set(a.id,{status:"waiting",message:"Not started"}); timerByNode.set(a.id,{start:0,dur:0,live:false}); stepByNode.set(a.id,[]);
       });
@@ -478,11 +554,26 @@
         list.textContent = arr.length>1 ? `steps: ${tail}` : `step: ${tail}`;
       }
     }
+    function captureNodeIO(agent,data){
+      const passId = Number((data||{}).pass_id || currentPass || 1);
+      const incoming = EDGES.filter(([f,t])=>t===agent).map(([f])=>f);
+      const input = {};
+      for(const src of incoming){
+        const prevMap = ioByNode.get(src) || {};
+        const prev = prevMap[passId] || prevMap[Math.max(...Object.keys(prevMap).map(Number), 1)];
+        if(prev && prev.output!==undefined){ input[src]=prev.output; }
+      }
+      const byPass = ioByNode.get(agent) || {};
+      byPass[passId] = {input,output:(data??{}),updated_at:new Date().toISOString(), status:(data?.status||"")};
+      ioByNode.set(agent,byPass);
+    }
     function pushEvent(agent,status,message,data){
       const ev={agent,status,message,data:data||{}};
+      if((status||"").toLowerCase()==="retry"){ currentPass += 1; }
       orderedEvents.push(ev);
       eventCounter += 1;
       markStep(agent,eventCounter);
+      captureNodeIO(agent,data||{});
       return ev;
     }
     function ragEdgeStageClass(from,to){
@@ -629,16 +720,86 @@
       renderEdges();
       updateDevInfo();
     }
+    function getRuntimeContext(id){
+      const st = stateById.get(id) || {};
+      const own = st.data ?? null;
+      let prev = null;
+      for(let i=orderedEvents.length-1;i>=0;i--){
+        if(orderedEvents[i].agent !== id) continue;
+        for(let j=i-1;j>=0;j--){
+          const cand = orderedEvents[j];
+          const isUpstream = EDGES.some(([f,t])=>f===cand.agent && t===id);
+          if(isUpstream){ prev = cand.data ?? null; break; }
+        }
+        break;
+      }
+      return { prev, own };
+    }
     function showHover(id,e){
-      const info=AGENT_INFO[id]||{role:"",explain:"",rules:[],apis:[],outputs:[],logos:[]};
+      const info=AGENT_INFO[id]||{name:id,role:"",explain:"",rules:[],details:[],apis:[],outputs:[],logos:[]};
       const logos=(info.logos||[]).map(x=>`<span class='logo'><img src='${x[1]}' alt='${x[0]}' onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span>`).join("");
       const rules=(info.rules||[]).map(x=>`<li>${x}</li>`).join("");
+      const inputs=(info.inputs||[]).map(x=>`<li>${x}</li>`).join("");
       const outputs=(info.outputs||[]).map(x=>`<li>${x}</li>`).join("");
-      hoverCard.innerHTML=`<div class="hover-head"><span class="n8n-logo"><img src="${(info.logos?.[0]?.[1])||LOGO("vscode.svg")}" alt="${id}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span><h3>${id}</h3></div><p>${info.role}</p><p>${info.explain||""}</p><div class="hover-sec"><h4>Rules / Guardrails</h4><ul class="hover-list">${rules}</ul></div><div class="hover-sec"><h4>Outputs</h4><ul class="hover-list">${outputs}</ul></div><div class="hover-sec"><h4>APIs / Tools</h4>${(info.apis||[]).map(x=>`<span class='pill'>${x}</span>`).join("")}</div><div class="hover-sec"><h4>Integrations</h4><div class="logos">${logos}</div></div>`;
+      const details=(info.details||[]).map(x=>`<li>${x}</li>`).join("");
+      const runtimeHtml = `<div class="hover-sec"><h4>Saved I/O</h4><p>Click node to open saved input/output panel.</p></div>`;
+      hoverCard.innerHTML=`<div class="hover-head"><span class="n8n-logo"><img src="${(info.logos?.[0]?.[1])||LOGO("vscode.svg")}" alt="${id}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span><h3>${info.name||id}</h3></div><p>${info.role}</p><p>${info.explain||""}</p><div class="hover-sec"><h4>Guardrails / Rules</h4><ul class="hover-list">${rules}</ul></div><div class="hover-sec"><h4>Input</h4><ul class="hover-list">${inputs}</ul></div><div class="hover-sec"><h4>Output</h4><ul class="hover-list">${outputs}</ul></div><div class="hover-sec"><h4>Detailed Behavior</h4><ul class="hover-list">${details}</ul></div><div class="hover-sec"><h4>APIs / Tools</h4>${(info.apis||[]).map(x=>`<span class='pill'>${x}</span>`).join("")}</div>${runtimeHtml}<div class="hover-sec"><h4>Integrations</h4><div class="logos">${logos}</div></div>`;
       hoverCard.style.display="block"; moveHover(e);
     }
     function moveHover(e){hoverCard.style.left=`${Math.min(window.innerWidth-490,e.clientX+16)}px`; hoverCard.style.top=`${Math.min(window.innerHeight-260,e.clientY+16)}px`;}
     function hideHover(){hoverCard.style.display="none";}
+    function toggleIoPanel(id){
+      if(ioNodeOpen===id){
+        ioPanel.style.display="none";
+        ioNodeOpen="";
+        return;
+      }
+      const byPass=ioByNode.get(id)||{};
+      const passIds=Object.keys(byPass).map(Number).sort((a,b)=>a-b);
+      ioTitle.textContent=`${id} - Saved Input/Output`;
+      ioTabs.innerHTML="";
+      const renderPass=(pid)=>{
+        const ctx=byPass[pid]||{};
+        const inSummary = summarizeIO(id, ctx.input||{}, true);
+        const outSummary = summarizeIO(id, ctx.output||{}, false);
+        ioInput.textContent = `${inSummary}\n\nRAW:\n${JSON.stringify(ctx.input||{},null,2)}`;
+        ioOutput.textContent = `${outSummary}\n\nRAW:\n${JSON.stringify(ctx.output||{},null,2)}`;
+      };
+      passIds.forEach((pid,idx)=>{
+        const b=document.createElement("button");
+        b.textContent = pid===1 ? "Pass 1" : `Retry ${pid-1}`;
+        b.onclick=()=>renderPass(pid);
+        ioTabs.appendChild(b);
+        if(idx===passIds.length-1){ renderPass(pid); }
+      });
+      if(!passIds.length){
+        ioInput.textContent="N/A";
+        ioOutput.textContent="N/A";
+      }
+      ioPanel.style.display="block";
+      ioNodeOpen=id;
+    }
+    function summarizeIO(id, payload, isInput){
+      if(!payload || typeof payload!=="object"){ return "No structured data"; }
+      if(id==="Source Quality Agent" && !isInput){
+        const rej = payload.rejections||{};
+        return `avg_credibility=${payload.average_credibility ?? "n/a"}, trust_t=${payload.trust_score_t ?? "n/a"}, rel_avg=${payload.relevance_score_avg ?? "n/a"}, temp_avg=${payload.temporal_weight_avg ?? "n/a"}, div_avg=${payload.diversity_multiplier_avg ?? "n/a"}, ew_avg=${payload.evidence_weight_avg ?? "n/a"}, accepted=${payload.accepted_count ?? payload.usable_count ?? "n/a"}, trusted=${payload.trusted_count ?? "n/a"}, diversity=${payload.domain_diversity ?? "n/a"}, rejected=${JSON.stringify(rej)}`;
+      }
+      if(id==="Relevance Scorer"){
+        return `relevance_score_avg=${payload.relevance_score_avg ?? "n/a"}, evidence_weight_avg=${payload.evidence_weight_avg ?? "n/a"}, accepted=${payload.accepted_count ?? payload.usable_count ?? "n/a"}, rejected_low_score=${(payload.rejections||{}).low_score ?? "n/a"}`;
+      }
+      if(id==="Temporal Scorer"){
+        return `temporal_weight_avg=${payload.temporal_weight_avg ?? "n/a"}, evidence_weight_avg=${payload.evidence_weight_avg ?? "n/a"}, accepted=${payload.accepted_count ?? payload.usable_count ?? "n/a"}, rejected_low_score=${(payload.rejections||{}).low_score ?? "n/a"}`;
+      }
+      if(id==="Diversity Filter"){
+        return `diversity_multiplier_avg=${payload.diversity_multiplier_avg ?? "n/a"}, domain_diversity=${payload.domain_diversity ?? "n/a"}, duplicate_penalty=${(payload.rejections||{}).duplicate_penalty ?? "n/a"}, accepted=${payload.accepted_count ?? payload.usable_count ?? "n/a"}`;
+      }
+      if(id==="Consensus Moderator Agent" && !isInput){
+        return `verdict=${payload.verdict ?? "n/a"}, confidence=${payload.confidence ?? "n/a"}, conflict=${payload.conflict ?? "n/a"}`;
+      }
+      return `keys: ${Object.keys(payload).join(", ") || "none"}`;
+    }
+    ioClose.onclick=()=>{ ioPanel.style.display="none"; ioNodeOpen=""; };
     function setNodeState(id,status,message,data){
       const card=cardById.get(id); if(!card)return;
       card.querySelector(".state").textContent=status;
@@ -647,6 +808,7 @@
       card.classList.remove("started","running","completed","ended","retry","failed","file_extracted","file_warning","needs_live_evidence");
       card.classList.add(statusClass(status));
       stateById.set(id,{status,message,data:data||{}});
+      captureNodeIO(id,data||{});
       const t=timerByNode.get(id)||{start:0,dur:0,live:false};
       if(status!=="waiting" && !t.start){t.start=Date.now(); t.live=true;}
       if(status==="started"||status==="retry"||status==="running"||status==="file_extracted"){t.live=true;}
@@ -762,6 +924,8 @@
     }
     function resetStates(){
       orderedEvents=[]; stepCursor=-1; prevEventAgent=""; eventCounter=0;
+      currentPass=1;
+      ioByNode.clear(); ioNodeOpen=""; ioPanel.style.display="none";
       for(const id of cardById.keys()){
         const card=cardById.get(id); if(card){card.classList.remove("active","started","running","completed","ended","retry","failed","file_extracted","file_warning","needs_live_evidence"); card.querySelector(".state").textContent="waiting";}
         if (card) { card.classList.remove("discovered"); card.classList.add("undiscovered"); }
@@ -776,7 +940,18 @@
       if (systemCard) { systemCard.classList.remove("undiscovered"); systemCard.classList.add("discovered"); }
       for(const p of edgeByPair.values()) p.classList.remove("discovered");
       timeline.textContent="Waiting for run..."; summary.textContent="Status: idle"; verdictBox.textContent="Verdict: waiting | Confidence: 0%"; clearFlash(); running=false; currentRunId=""; startMs=0; totalTimer.textContent="Total: 00:00.0000"; const fmt=document.getElementById("formatSummary"); if(fmt) fmt.textContent="Evidence formats: canonical schema active (awaiting run)."; selectAgent("Intake Agent");
+      runBtn.disabled=false; cancelBtn.disabled=true;
+      lockInputs(false);
     }
+    function lockInputs(locked){
+      claimEl.disabled=locked;
+      inputKindEl.disabled=locked;
+      wfFileEl.disabled=locked;
+      cacheModeEl.disabled=locked;
+      forceRecheckEl.disabled=locked;
+      pdfPagesEl.disabled=locked;
+    }
+    // Canvas-only layout: controls remain embedded in world panels.
     function normalizeModeLayout(modeKey){
       const nodes = MODELS[modeKey];
       if(!nodes || !nodes.length) return;
@@ -807,16 +982,21 @@
     function normAgent(id){const map={"Moderator":"Consensus Moderator Agent","Rebuttal Research Agent":"Web Research Agent","Archive Hunter Agent":"Primary Source Agent","Web Scout Agent":"Web Research Agent","Evidence Auditor Agent":"Source Quality Agent"}; return map[id]||id;}
 
     async function runWorkflow(){
+      if(running) return;
       resetStates(); timeline.textContent="Starting async run...\n"; running=true; startMs=Date.now();
+      runBtn.disabled=true; cancelBtn.disabled=false;
+      lockInputs(true);
       const body=new FormData();
       const kind=(document.getElementById("inputKind").value||"text").toLowerCase();
       const cacheMode=(document.getElementById("cacheMode").value||"off").toLowerCase();
       const forceRecheck=document.getElementById("forceRecheck").checked ? "1" : "0";
+      const pdfPages=(pdfPagesEl.value||"").trim();
       const file=document.getElementById("wfFile").files?.[0] || null;
       body.append("text",document.getElementById("claim").value);
       body.append("input_type", kind==="image" ? "image" : (kind==="pdf" ? "pdf" : "text"));
       body.append("cache_mode", cacheMode);
       body.append("force_live_recheck", forceRecheck);
+      body.append("pdf_pages", pdfPages);
       if(file) body.append("file", file);
       activeInputNode = kind==="image" ? "Image OCR Node" : (kind==="pdf" ? "PDF Extract Node" : "Text Input Node");
       setNodeState("System","started","Run orchestrator started",{input_type:kind, cache_mode:cacheMode, force_live_recheck:forceRecheck});
@@ -833,14 +1013,17 @@
       t1.innerHTML=`${String(eventCounter).padStart(2,"0")} ${tag("started")} <strong>${activeInputNode}</strong> Sub-agent triggered`;
       timeline.appendChild(t1);
       timeline.scrollTop=timeline.scrollHeight;
-      let runId=""; try{
+      let runId="";
+      try{
         const r=await fetch("/api/verify/start",{method:"POST",body});
-        runId=(await r.json()).run_id;
-        currentRunId=runId;
-        try{
-          localStorage.setItem("factlens_active_run", JSON.stringify({ run_id: runId, started_at: Date.now(), source: "workflow" }));
-        }catch{}
-      }catch{timeline.textContent="start failed"; running=false; return;}
+        if(!r.ok){ throw new Error(`start failed (${r.status})`); }
+        const payload=await r.json();
+        runId=payload.run_id; currentRunId=runId;
+      }catch(err){
+        timeline.textContent=`start failed: ${err?.message||'unknown error'}`;
+        running=false; runBtn.disabled=false; cancelBtn.disabled=true; lockInputs(false);
+        return;
+      }
       const seen=new Set(); const seenSynthetic=new Set(); let done=false;
       while(!done){
         try{
@@ -856,10 +1039,11 @@
               const skey = `${aid}|${sid}|${e.status}|${orderedEvents.length}`;
               if (seenSynthetic.has(skey)) continue;
               seenSynthetic.add(skey);
-              setNodeState(sid, e.status, `Triggered by ${aid}`, { synthetic: true });
+              const d = Object.assign({}, e.data||{}, { synthetic: true, parent_agent: aid });
+              setNodeState(sid, e.status, `Triggered by ${aid}`, d);
               const base = eventCounter;
               const pidx = subs.indexOf(sid) + 1;
-              orderedEvents.push({ agent: sid, status: e.status, message: `Triggered by ${aid}`, data: { synthetic: true } });
+              orderedEvents.push({ agent: sid, status: e.status, message: `Triggered by ${aid}`, data: d });
               markStep(sid, `${base}.${pidx}`);
               const srow=document.createElement("div");
               srow.innerHTML=`${String(base).padStart(2,"0")}.${pidx} ${tag(e.status)} <strong>${sid}</strong> Triggered by ${aid}`;
@@ -870,7 +1054,7 @@
           }
           const st=await (await fetch(`/api/runs/${runId}/status`)).json();
           if(st.status==="completed"||st.status==="failed"||st.status==="cancelled"){
-            done=true; running=false; clearFlash();
+            done=true; running=false; clearFlash(); runBtn.disabled=false; cancelBtn.disabled=true; lockInputs(false);
             finalizeLiveTimers();
             const out=st.result||{};
             applyDynamicRunLogos(out);
@@ -881,14 +1065,27 @@
               : (st.status==="cancelled"
                 ? `Status: cancelled | ${out.error||"run cancelled"}`
                 : `Status: completed | Verdict=${out.verdict||"n/a"} | Confidence=${out.confidence||0}% | Sources=${(out.sources||[]).length}`);
-            verdictBox.textContent=st.status==="cancelled"
-              ? "Verdict: cancelled | Confidence: 0%"
-              : `Verdict: ${out.verdict||"n/a"} | Confidence: ${out.confidence||0}%`;
+            if(st.status==="failed"){
+              verdictBox.textContent=`Verdict: failed | Confidence: 0%`;
+            } else if(st.status==="cancelled"){
+              verdictBox.textContent="Verdict: cancelled | Confidence: 0%";
+            } else {
+              verdictBox.textContent=`Verdict: ${out.verdict||"n/a"} | Confidence: ${out.confidence||0}%`;
+            }
+            if(st.status==="completed" && out?.cache?.hit && out?.cache_hit_message){
+              const msg=document.createElement("div");
+              msg.innerHTML=`${tag("completed")} <strong>Cache Policy Node</strong> ${out.cache_hit_message}`;
+              timeline.appendChild(msg);
+              timeline.scrollTop=timeline.scrollHeight;
+            }
             currentRunId="";
-            try{ localStorage.removeItem("factlens_active_run"); }catch{}
             if(orderedEvents.length)showStep(orderedEvents.length-1);
           }
-        } catch { const row=document.createElement("div"); row.textContent="polling error"; timeline.appendChild(row); }
+        } catch (err) {
+          const row=document.createElement("div");
+          row.textContent=`polling error: ${err?.message||'request failed'}`;
+          timeline.appendChild(row);
+        }
         await new Promise(r=>setTimeout(r,450));
       }
     }
@@ -929,6 +1126,7 @@
         return;
       }
       try{
+        summary.textContent="Status: cancelling...";
         await fetch(`/api/runs/${currentRunId}/cancel`,{method:"POST"});
         const row=document.createElement("div");
         row.innerHTML=`${tag("cancelled")} <strong>System</strong> Cancel requested`;
@@ -941,6 +1139,7 @@
         timeline.scrollTop=timeline.scrollHeight;
       }
     };
+    // Canvas-only overlays: left panel acts as floating drawer sections.
     document.getElementById("reset").onclick=()=>{fitToView();resetStates();};
     const panStep = 180;
     document.getElementById("zoomIn").onclick=()=>{scale=Math.min(1.8,scale+0.08);apply();};

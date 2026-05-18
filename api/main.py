@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import uuid
+import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -51,6 +52,13 @@ _run_results: dict[str, dict] = {}
 _run_status: dict[str, str] = {}
 _run_started_at: dict[str, float] = {}
 _run_cancel_requested: dict[str, bool] = {}
+
+
+def _memory_db_path() -> Path:
+    raw = os.getenv("FACTLENS_MEMORY_DB", "").strip()
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parent.parent / "data" / "factlens_memory.sqlite3"
 
 app.add_middleware(
     CORSMiddleware,
@@ -190,6 +198,111 @@ async def run_status(run_id: str) -> dict:
 @app.get("/api/runs/{run_id}/events")
 async def run_events(run_id: str) -> dict:
     return {"run_id": run_id, "events": event_store.list(run_id)}
+
+
+@app.get("/api/runs/live")
+async def runs_live() -> dict:
+    now = time.time()
+    rows = []
+    with _run_lock:
+        for rid, status in _run_status.items():
+            if status not in {"running", "unknown"}:
+                continue
+            started_at = _run_started_at.get(rid)
+            rows.append(
+                {
+                    "run_id": rid,
+                    "status": status,
+                    "started_at": int(started_at) if started_at else None,
+                    "elapsed_sec": round(now - started_at, 2) if started_at else None,
+                }
+            )
+    rows.sort(key=lambda x: x.get("started_at") or 0, reverse=True)
+    return {"runs": rows, "count": len(rows)}
+
+
+@app.get("/api/storage/runs")
+async def storage_runs(
+    verdict: str = "",
+    q: str = "",
+    recency: str = "all",
+    since_ts: int = 0,
+    include_partial: int = 0,
+    limit: int = 200,
+) -> dict:
+    db = _memory_db_path()
+    if not db.exists():
+        return {"runs": [], "count": 0, "db_path": str(db), "warning": "memory database not found"}
+    limit = max(1, min(int(limit or 200), 1000))
+    where = []
+    params: list[object] = []
+    if int(include_partial or 0) != 1:
+        where.append("result_json IS NOT NULL")
+    if verdict.strip():
+        where.append("LOWER(COALESCE(verdict,'')) = ?")
+        params.append(verdict.strip().lower())
+    if q.strip():
+        where.append("(LOWER(COALESCE(claim_raw,'')) LIKE ? OR LOWER(COALESCE(claim_normalized,'')) LIKE ?)")
+        like = f"%{q.strip().lower()}%"
+        params.extend([like, like])
+    now = int(time.time())
+    rec = (recency or "all").strip().lower()
+    if since_ts and int(since_ts) > 0:
+        where.append("COALESCE(ended_at, started_at) >= ?")
+        params.append(int(since_ts))
+    elif rec in {"1h", "24h", "7d", "30d", "90d"}:
+        delta = {"1h": 3600, "24h": 86400, "7d": 604800, "30d": 2592000, "90d": 7776000}[rec]
+        where.append("COALESCE(ended_at, started_at) >= ?")
+        params.append(now - delta)
+    sql = """
+        SELECT run_id, session_id, claim_raw, claim_normalized, verdict, confidence, input_type, started_at, ended_at, policy_version
+        FROM runs
+    """
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY COALESCE(ended_at, started_at) DESC LIMIT ?"
+    params.append(limit)
+    with sqlite3.connect(db, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    return {"runs": rows, "count": len(rows), "db_path": str(db)}
+
+
+@app.get("/api/storage/run/{run_id}")
+async def storage_run_detail(run_id: str) -> dict:
+    db = _memory_db_path()
+    if not db.exists():
+        return {"run": None, "evidence": [], "events": [], "warning": "memory database not found"}
+    with sqlite3.connect(db, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        run = conn.execute(
+            """
+            SELECT run_id, session_id, claim_raw, claim_normalized, verdict, confidence, input_type, started_at, ended_at,
+                   policy_version, entities_json, numbers_json, evidence_summary, stage_metrics_json, result_json
+            FROM runs WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        evidence = conn.execute(
+            """
+            SELECT title, url, source_type, channel, domain, credibility, relevance, snippet
+            FROM evidence WHERE run_id = ? ORDER BY id ASC
+            """,
+            (run_id,),
+        ).fetchall()
+        events = conn.execute(
+            """
+            SELECT id, agent, status, message, data_json
+            FROM run_events WHERE run_id = ? ORDER BY id ASC
+            """,
+            (run_id,),
+        ).fetchall()
+    return {
+        "run": dict(run) if run else None,
+        "evidence": [dict(r) for r in evidence],
+        "events": [dict(r) for r in events],
+        "db_path": str(db),
+    }
 
 
 static_dir = Path(__file__).resolve().parent.parent / "static"

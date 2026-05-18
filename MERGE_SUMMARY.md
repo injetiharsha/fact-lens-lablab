@@ -1,3 +1,11 @@
+## Documentation Sync Metadata
+
+- Last Updated: 2026-05-18 18:43:15 +05:30
+- Current Commit: 8972a91
+- Note: This merge summary is historical; current runtime status is captured in COMPLETION_SUMMARY.md and README.md.
+- Latest full smoke (2026-05-18): `India is the 4th largest economy in 2026` -> `insufficient_evidence` (retrieval coverage issue; see RETRIEVAL_INTENT_GAP.md).
+
+---
 # Intake Agent Refinement - Merge Summary
 
 **Merge Date:** 2026-05-18  
@@ -237,3 +245,12 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ---
 
 Generated: 2026-05-18 18:38 UTC+5:30
+
+
+## Runtime Validation Note
+
+Latest smoke run (2026-05-18 18:54:26 +05:30) on old workflow:
+- Claim: India is the 4th largest economy in 2026
+- Run ID: 9beb0cdd-2bdd-4e8a-b6e0-015b5b4423c4
+- Verdict: insufficient_evidence (25%, sources=0)
+- Interpretation: merge scope is stable, but retrieval reliability must be improved before decision quality can improve.

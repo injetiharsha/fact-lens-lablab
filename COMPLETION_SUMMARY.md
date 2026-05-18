@@ -1,3 +1,13 @@
+## Documentation Sync Metadata
+
+- Last Updated: 2026-05-18 18:43:15 +05:30
+- Current Commit: 8972a91
+- Smoke Test Command: python -m factlens_crew.smoke_test_india_2026
+- Smoke Test Claim: India is the 4th largest economy in 2026
+- Smoke Test Outcome: PASS (runner OK), workflow verdict=insufficient_evidence, confidence=25%, duration=1.84s
+- Full Smoke (claim-level): run_id=a1992a16-0835-46d9-8a0a-7c57117739c5, verdict=insufficient_evidence, confidence=25%, sources=0, runtime=2.333s
+
+---
 # FactLens System Refinement & Intake Agent Testing - COMPLETION SUMMARY
 
 **Date:** May 18, 2026  
@@ -314,3 +324,49 @@ python -m pytest tests/test_workflow.py -v
 
 All objectives achieved. System refined to S2 maturity. Comprehensive tests in place. Documentation complete. Ready for production testing.
 
+
+
+## Latest Full Smoke Update
+
+- Timestamp: 2026-05-18 18:54:26 +05:30
+- Run ID: 9beb0cdd-2bdd-4e8a-b6e0-015b5b4423c4
+- Claim: India is the 4th largest economy in 2026
+- Verdict: insufficient_evidence
+- Confidence: 25%
+- Sources: 0
+- Runtime: 3.985s
+- Primary issue: retrieval coverage/recall remains the bottleneck.
+
+## Audit Update (Latest)
+
+- Time: 2026-05-18 19:30:12 +05:30
+- Smoke Claim: India is the 4th largest economy in 2026
+- Run ID: 11c1d3d8-dc36-46c3-9a44-90a70f6eb50e
+- Verdict: insufficient_evidence
+- Confidence: 25%
+- Sources: 0
+- Runtime: 2.543s
+- Root Cause: retrieval sparsity (web/primary recall), not scoring logic failure.
+
+## Run Variance Analysis (Server vs Direct Smoke)
+
+- Symptom observed:
+  - Server async run sometimes >60s with rich evidence and `refuted`.
+  - Direct smoke run much faster with `insufficient_evidence`.
+- Most likely causes:
+  1. Different runtime process state (stale server process using older code/config).
+  2. Different environment loading paths (`.env` vs inherited shell env).
+  3. Different execution path (`/api/verify/start` async worker vs direct function call).
+  4. Provider/network variability and retries (external search + LLM latency).
+- Mitigation applied:
+  - `run_factlens_crew()` now loads `.env` on direct invocation for better parity.
+- Recommended validation mode:
+  - Compare runs using the same API path and same host/port after server restart.
+
+## Smoke Test Standard (Effective Now)
+
+- Use **server-path only** for smoke tests:
+  - `POST /api/verify/start`
+  - poll `GET /api/runs/{run_id}/status`
+  - inspect `GET /api/runs/{run_id}/events`
+- Do not use direct in-process function calls for smoke pass/fail decisions.

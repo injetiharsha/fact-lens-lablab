@@ -24,24 +24,114 @@ TRUSTED_DOMAINS = (
     "who.int",
     "nasa.gov",
     "worldbank.org",
+    "imf.org",
     "un.org",
     "europa.eu",
+    "ec.europa.eu",
+    "oecd.org",
     "nih.gov",
     "cdc.gov",
+    "data.gov",
+    "ourworldindata.org",
     "nature.com",
+    "science.org",
     "reuters.com",
     "apnews.com",
 )
-BAD_DOMAIN_HINTS = ("twitter.com", "x.com", "facebook.com", "instagram.com", "tiktok.com", "wa.me", "t.me")
+BAD_DOMAIN_HINTS = (
+    "twitter.com",
+    "x.com",
+    "facebook.com",
+    "instagram.com",
+    "tiktok.com",
+    "wa.me",
+    "t.me",
+    "reddit.com",
+    "quora.com",
+    "pinterest.com",
+)
 
+# Credibility tiers (CW) tuned for deterministic source scoring.
 DOMAIN_TIERS = (
-    (1.00, ("gov.in", "rbi.org.in", "nasa.gov", "who.int", ".gov", ".edu", "nih.gov", "cdc.gov")),
-    (0.95, ("un.org", "unicef.org", "worldbank.org", "nature.com")),
-    (0.85, ("pti.in", "ani.in", "reuters.com", "apnews.com")),
-    (0.75, ("thehindu.com", "ndtv.com", "indianexpress.com")),
-    (0.65, ("factly.in", "altnews.in", "boomlive.in", "thequint.com")),
-    (0.15, ("satire", "tabloid")),
-    (0.05, ("twitter.com", "x.com", "facebook.com", "t.me", "wa.me")),
+    # T1: Government / official scientific bodies
+    (
+        1.00,
+        (
+            ".gov",
+            ".edu",
+            "gov.in",
+            "rbi.org.in",
+            "nasa.gov",
+            "who.int",
+            "nih.gov",
+            "cdc.gov",
+            "ecb.europa.eu",
+            "data.gov",
+        ),
+    ),
+    # T2: International acclaimed orgs / high-quality science
+    (
+        0.95,
+        (
+            "un.org",
+            "unicef.org",
+            "worldbank.org",
+            "imf.org",
+            "oecd.org",
+            "europa.eu",
+            "ec.europa.eu",
+            "ourworldindata.org",
+            "nature.com",
+            "science.org",
+            "thelancet.com",
+            "nejm.org",
+        ),
+    ),
+    # T3: National wire services / major international outlets
+    (
+        0.85,
+        (
+            "reuters.com",
+            "apnews.com",
+            "bloomberg.com",
+            "ft.com",
+            "wsj.com",
+            "bbc.com",
+            "bbc.co.uk",
+            "afp.com",
+            "pti.in",
+            "ani.in",
+        ),
+    ),
+    # T4: Reputable national news
+    (
+        0.75,
+        (
+            "thehindu.com",
+            "indianexpress.com",
+            "ndtv.com",
+            "economictimes.com",
+            "livemint.com",
+            "hindustantimes.com",
+            "timesofindia.indiatimes.com",
+        ),
+    ),
+    # T5: Regional/fact-checkers
+    (
+        0.65,
+        (
+            "factly.in",
+            "altnews.in",
+            "boomlive.in",
+            "thequint.com",
+            "snopes.com",
+            "politifact.com",
+            "factcheck.org",
+        ),
+    ),
+    # T7/T8: Low-trust and social/restricted
+    (0.15, ("satire", "tabloid", "clickbait", "gossip")),
+    (0.05, ("twitter.com", "x.com", "facebook.com", "instagram.com", "t.me", "wa.me", "tiktok.com")),
 )
 
 TEMPORAL_WEIGHTS = (
@@ -58,7 +148,7 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()
 
 
-def extract_pdf_text(path: str, max_chars: int = 12000) -> str:
+def extract_pdf_text(path: str, max_chars: int = 12000, page_spec: str = "") -> str:
     try:
         import fitz  # type: ignore
     except Exception:
@@ -66,7 +156,9 @@ def extract_pdf_text(path: str, max_chars: int = 12000) -> str:
 
     chunks: List[str] = []
     with fitz.open(path) as doc:
-        for page in doc[:5]:
+        indices = _parse_pdf_page_spec(page_spec, len(doc))
+        for idx in indices:
+            page = doc[idx]
             chunks.append(page.get_text("text"))
             if sum(len(chunk) for chunk in chunks) >= max_chars:
                 break
@@ -83,11 +175,11 @@ def extract_image_text(path: str) -> str:
     return normalize_text(pytesseract.image_to_string(Image.open(path)))
 
 
-def extract_file_text(path: str) -> str:
+def extract_file_text(path: str, pdf_pages: str = "") -> str:
     mime, _ = mimetypes.guess_type(path)
     ext = Path(path).suffix.lower()
     if ext == ".pdf" or mime == "application/pdf":
-        return extract_pdf_text(path)
+        return extract_pdf_text(path, page_spec=pdf_pages)
     if ext in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"} or str(mime or "").startswith("image/"):
         return extract_image_text(path)
     try:
@@ -103,6 +195,40 @@ def _source_type(url: str) -> str:
     if "wikipedia.org" in host:
         return "reference"
     return "web"
+
+
+def _parse_pdf_page_spec(spec: str, total_pages: int) -> List[int]:
+    # Printer-style: "1", "2", "1-4", "1,3,5-7"
+    if total_pages <= 0:
+        return []
+    raw = normalize_text(spec)
+    if not raw:
+        return list(range(min(5, total_pages)))
+    out: List[int] = []
+    for token in [x.strip() for x in raw.split(",") if x.strip()]:
+        if "-" in token:
+            a, b = token.split("-", 1)
+            if not a.isdigit() or not b.isdigit():
+                continue
+            s, e = int(a), int(b)
+            if s > e:
+                s, e = e, s
+            for n in range(s, e + 1):
+                if 1 <= n <= total_pages:
+                    out.append(n - 1)
+        else:
+            if token.isdigit():
+                n = int(token)
+                if 1 <= n <= total_pages:
+                    out.append(n - 1)
+    # de-dupe keep order
+    seen = set()
+    uniq = []
+    for i in out:
+        if i not in seen:
+            seen.add(i)
+            uniq.append(i)
+    return uniq or list(range(min(5, total_pages)))
 
 
 def _credibility(url: str) -> int:
@@ -235,40 +361,48 @@ def classify_claim_domain(claim: str) -> str:
 
 
 def routed_queries(claim: str, domain: str) -> List[str]:
+    facts = extract_claim_facts(claim)
+    intent = facts.get("intent_query") or ""
+    year = facts.get("year")
+    rank = facts.get("rank")
+    country = facts.get("country") or ""
+    rank_hint = f"{rank} largest" if rank else ""
+    year_hint = str(year) if year else "latest"
+    common_compare = f"{country} {rank_hint} {year_hint}".strip()
     if domain == "economy":
         return [
-            f"{claim} site:worldbank.org OR site:imf.org OR site:oecd.org OR site:fred.stlouisfed.org",
-            f"{claim} official statistics 2026",
-            f"{claim} Reuters AP",
+            f"{claim} {intent} {common_compare} site:imf.org OR site:worldbank.org OR site:oecd.org OR site:fred.stlouisfed.org",
+            f"{claim} {common_compare} nominal GDP ranking official statistics",
+            f"{claim} {common_compare} Reuters AP Bloomberg",
         ]
     if domain == "population":
         return [
-            f"{claim} site:worldbank.org OR site:un.org OR site:census.gov OR site:data.gov.in",
-            f"{claim} official census",
-            f"{claim} peer reviewed demographic data",
+            f"{claim} {intent} {common_compare} site:worldbank.org OR site:un.org OR site:census.gov OR site:data.gov.in",
+            f"{claim} {common_compare} official census demographic estimate",
+            f"{claim} {common_compare} peer reviewed demographic data",
         ]
     if domain == "health":
         return [
-            f"{claim} site:who.int OR site:cdc.gov OR site:nih.gov OR site:thelancet.com",
-            f"{claim} public health dataset",
-            f"{claim} systematic review",
+            f"{claim} {intent} {common_compare} site:who.int OR site:cdc.gov OR site:nih.gov OR site:thelancet.com",
+            f"{claim} {common_compare} public health dataset",
+            f"{claim} {common_compare} systematic review",
         ]
     if domain == "politics":
         return [
-            f"{claim} site:eci.gov.in OR site:parliament.uk OR site:gov.in OR site:gov",
-            f"{claim} official statement transcript",
-            f"{claim} Reuters AP fact check",
+            f"{claim} {intent} {common_compare} site:eci.gov.in OR site:parliament.uk OR site:gov.in OR site:gov",
+            f"{claim} {common_compare} official statement transcript",
+            f"{claim} {common_compare} Reuters AP fact check",
         ]
     if domain == "science":
         return [
-            f"{claim} site:nasa.gov OR site:noaa.gov OR site:nature.com OR site:sciencedirect.com",
-            f"{claim} educational institution source",
-            f"{claim} scientific consensus",
+            f"{claim} {intent} {common_compare} site:nasa.gov OR site:noaa.gov OR site:nature.com OR site:sciencedirect.com",
+            f"{claim} {common_compare} educational institution source",
+            f"{claim} {common_compare} scientific consensus",
         ]
     return [
-        claim,
-        f"{claim} official source",
-        f"{claim} reputable news",
+        f"{claim} {intent}",
+        f"{claim} {common_compare} official source",
+        f"{claim} {common_compare} reputable news",
     ]
 
 
@@ -301,11 +435,23 @@ def extract_claim_facts(claim: str) -> dict:
             country = token
             break
     metric = "gdp" if "gdp" in low or "economy" in low else ("population" if "population" in low else "general")
+    intent_tokens = []
+    if country:
+        intent_tokens.append(country)
+    if metric != "general":
+        intent_tokens.append(metric)
+    if year_match:
+        intent_tokens.append(year_match.group(0))
+    if rank_match:
+        intent_tokens.append(f"{rank_match.group(1)} largest")
+    comparative = bool(rank_match) or any(t in low for t in ("largest", "smallest", "higher than", "lower than", "rank"))
     return {
         "country": country,
         "year": int(year_match.group(0)) if year_match else None,
         "rank": int(rank_match.group(1)) if rank_match else None,
         "metric": metric,
+        "comparative": comparative,
+        "intent_query": " ".join(intent_tokens).strip(),
     }
 
 
@@ -326,12 +472,34 @@ def gather_api_evidence(claim: str, domain: str) -> List[EvidenceItem]:
     metric = "NY.GDP.MKTP.CD" if facts.get("metric") == "gdp" or domain == "economy" else "SP.POP.TOTL"
     country_code = "IN" if country in {"india"} else "US"
     url = f"https://api.worldbank.org/v2/country/{country_code}/indicator/{metric}?format=json"
+    target_year = facts.get("year")
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
-            raw = resp.read(12000).decode("utf-8", errors="ignore")
+            raw = resp.read(32000).decode("utf-8", errors="ignore")
     except Exception:
         return []
     snippet = normalize_text(raw)[:600]
+    # Extract year-aware compact snippet when possible.
+    try:
+        payload = json.loads(raw)
+        rows = payload[1] if isinstance(payload, list) and len(payload) > 1 and isinstance(payload[1], list) else []
+        selected = None
+        if target_year:
+            by_year = [r for r in rows if str(r.get("date", "")).isdigit()]
+            if by_year:
+                by_year.sort(key=lambda r: abs(int(r.get("date", 0)) - int(target_year)))
+                selected = by_year[0]
+        if not selected and rows:
+            vals = [r for r in rows if r.get("value") is not None and str(r.get("date", "")).isdigit()]
+            if vals:
+                vals.sort(key=lambda r: int(r.get("date", 0)), reverse=True)
+                selected = vals[0]
+        if selected:
+            snippet = normalize_text(
+                f"indicator={metric}; country={country}; year={selected.get('date')}; value={selected.get('value')}; source=World Bank API"
+            )[:600]
+    except Exception:
+        pass
     score = compare_claim_to_evidence(claim, snippet)
     return [
         EvidenceItem(
@@ -421,7 +589,12 @@ def offline_fallback_message() -> str:
 
 
 def search_primary_sources(query: str, max_results: int = 5) -> List[EvidenceItem]:
-    trusted_query = f"{query} site:gov OR site:edu OR site:who.int OR site:nasa.gov OR site:worldbank.org"
+    facts = extract_claim_facts(query)
+    intent = facts.get("intent_query") or ""
+    trusted_query = (
+        f"{query} {intent} "
+        "site:gov OR site:edu OR site:who.int OR site:nasa.gov OR site:worldbank.org OR site:imf.org OR site:oecd.org"
+    )
     rows = _safe_search_web(trusted_query, max_results=max_results)
     trusted = [row for row in rows if row.source_type in {"trusted", "reference"}]
     return trusted or rows[:max_results]
@@ -564,8 +737,11 @@ def _search_vertex_grounding(query: str, max_results: int = 5) -> List[EvidenceI
         "Content-Type": "application/json",
     }
     user_prompt = (
-        "Find concise fact-checking evidence for this claim from live web search. "
-        "Return ONLY a JSON array where each item has keys: title, url, snippet. "
+        "Find concise fact-checking evidence for this claim from live web search.\n"
+        "Use only sources you can cite with valid http(s) URLs.\n"
+        "Return ONLY JSON array. No markdown, no code fences, no prose.\n"
+        "Array item schema: {\"title\":\"string\",\"url\":\"https://...\",\"snippet\":\"string\"}\n"
+        "If no usable sources found, return [].\n"
         "Prefer official/government/academic/reputable sources. "
         f"Return up to {max_results} items (prefer exactly {max_results}). "
         "Each item MUST include a valid http(s) URL.\n\n"
@@ -578,7 +754,7 @@ def _search_vertex_grounding(query: str, max_results: int = 5) -> List[EvidenceI
         {
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
             "tools": [{"googleSearch": {}}],
-            "generationConfig": {"temperature": 0.2},
+            "generationConfig": {"temperature": float(os.getenv("FACTLENS_LLM_TEMPERATURE", "0.1")), "maxOutputTokens": 2048},
         }
     ]
 

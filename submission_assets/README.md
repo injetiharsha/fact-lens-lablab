@@ -1,44 +1,12 @@
-> Audit Sync (2026-05-18 19:30:12 +05:30)
-> - Workflow mode: old orchestrator path only (no architecture migration)
-> - Latest smoke run: $run
-> - Claim: "India is the 4th largest economy in 2026"
-> - Result: insufficient_evidence (confidence 25%, sources 0)
-> - Current blocker: retrieval sparsity; scoring remains conservative by design.
-> Status Sync (2026-05-18 18:43:15 +05:30)
-> - Commit: `8972a91`
-> - Smoke test: `python -m factlens_crew.smoke_test_india_2026` = PASS (runner OK)
-> - Latest workflow outcome for claim "India is the 4th largest economy in 2026": `insufficient_evidence` (25% confidence)
 # FactLens Crew
 
 Collaborative multi-agent fact-checking demo for the lablab.ai AI Agent Olympics / Milan AI Week hackathon.
 
-## System Status
-
-**Current Maturity:** S2 (Evidence-Reliable) per PROJECT_OPTIMIZATION_PLAYBOOK
-**Latest Refinement:** Intake Agent (2026-05-18)
-- Deterministic checkability criteria
-- Explicit error handling and diagnostics
-- Opinion detection
-- Confidence calibration
-
-For detailed refinements, see [INTAKE_AGENT_REFINEMENT.md](INTAKE_AGENT_REFINEMENT.md)
-
-## Quick Start: Testing Intake Agent
-
-```powershell
-# Unit tests (comprehensive test suite)
-python -m pytest tests/test_intake_agent.py -v
-
-# Endpoint test (demonstrates all 5 test matrix claims + edge cases)
-python scripts/test_intake_endpoint.py
-
-# Integration test (full workflow)
-python -m pytest tests/test_workflow.py -v
-```
-
 ## What It Builds
 
 FactLens Crew accepts a text claim plus optional PDF/image input. A visible War Room of specialized agents extracts the claim, researches evidence, challenges assumptions, scores source quality, and produces a consensus verdict. It does not fabricate final verdicts when live evidence is unavailable.
+
+## Agent Roles
 
 - Intake Agent: extracts a checkable claim from text, PDF, or image input. Uses Gemini when `GEMINI_API_KEY` is configured.
 - Domain Router Agent: classifies claim domain and semantic route.
@@ -139,4 +107,53 @@ Use these env knobs to control quality/speed and guardrails:
 - `FACTLENS_VERIFIER_TRIGGER_CONFIDENCE_GATE`
 - `FACTLENS_DOMAIN_BLACKLIST`
 
+## Hackathon Submission Pack
 
+Use this project with the required lablab submission fields:
+
+- Basic information:
+  - Project title
+  - Short description
+  - Long description
+  - Technology/category tags
+- Cover image and presentation:
+  - Cover image
+  - Video presentation
+  - Slide presentation
+- App hosting and code repository:
+  - Public GitHub repository
+  - Demo platform
+  - Application URL
+
+This repo includes a ready template in `SUBMISSION.md` to fill all fields before final submit.
+
+### Suggested Submission Values (FactLens Crew)
+
+- Title: `FactLens Crew: Agentic Evidence Mesh for Transparent Fact Verification`
+- Category tags:
+  - `Collaborative Systems`
+  - `Agentic Workflows`
+  - `Intelligent Reasoning`
+  - `Multimodal`
+- Public repo:
+  - `https://github.com/injetiharsha/fact-lens-lablab`
+- Demo URL:
+  - Set after deployment (Vultr or other public host)
+
+### Pre-Submit Checklist
+
+1. Ensure `.env` is not committed; keep `.env.example` updated.
+2. Run one clean smoke test with:
+   - claim: `India is the 4th largest economy in 2026`
+   - verify events, verdict, confidence, sources.
+3. Record a 2-3 minute demo video:
+   - show input
+   - show agent-by-agent workflow
+   - show final verdict + evidence + guardrails
+4. Export 5-8 slide deck:
+   - problem
+   - architecture
+   - agent roles
+   - scoring + cache/RAG behavior
+   - live results
+5. Fill `SUBMISSION.md` and copy to lablab form.
