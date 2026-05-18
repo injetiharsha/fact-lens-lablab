@@ -2,11 +2,33 @@
 
 Collaborative multi-agent fact-checking demo for the lablab.ai AI Agent Olympics / Milan AI Week hackathon.
 
+## System Status
+
+**Current Maturity:** S2 (Evidence-Reliable) per PROJECT_OPTIMIZATION_PLAYBOOK
+**Latest Refinement:** Intake Agent (2026-05-18)
+- Deterministic checkability criteria
+- Explicit error handling and diagnostics
+- Opinion detection
+- Confidence calibration
+
+For detailed refinements, see [INTAKE_AGENT_REFINEMENT.md](INTAKE_AGENT_REFINEMENT.md)
+
+## Quick Start: Testing Intake Agent
+
+```powershell
+# Unit tests (comprehensive test suite)
+python -m pytest tests/test_intake_agent.py -v
+
+# Endpoint test (demonstrates all 5 test matrix claims + edge cases)
+python scripts/test_intake_endpoint.py
+
+# Integration test (full workflow)
+python -m pytest tests/test_workflow.py -v
+```
+
 ## What It Builds
 
 FactLens Crew accepts a text claim plus optional PDF/image input. A visible War Room of specialized agents extracts the claim, researches evidence, challenges assumptions, scores source quality, and produces a consensus verdict. It does not fabricate final verdicts when live evidence is unavailable.
-
-## Agent Roles
 
 - Intake Agent: extracts a checkable claim from text, PDF, or image input. Uses Gemini when `GEMINI_API_KEY` is configured.
 - Domain Router Agent: classifies claim domain and semantic route.

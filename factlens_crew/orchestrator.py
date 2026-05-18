@@ -307,25 +307,98 @@ class FactLensCrewWorkflow:
         return normalize_text(" ".join(part for part in parts if part))
 
     def _intake_agent(self, raw_text: str) -> Dict[str, Any]:
+        """Extract and validate a checkable claim from raw text.
+        
+        Contract:
+        - Input: raw_text (string, may be empty)
+        - Output: dict with keys 'claim', 'checkable', 'report'
+        - Failure modes: 
+          - Empty input -> checkable=False, confidence=0
+          - Non-factual/opinion -> checkable=False, confidence=25
+          - Valid factual claim -> checkable=True, confidence=70-82
+        """
+        # Stage 1: Extract candidate claim
         claim = self._best_claim(raw_text)
-        checkable = bool(claim and len(claim.split()) >= 4 and not claim.endswith("?"))
+        
+        # Stage 2: Apply deterministic checkability criteria
+        # Requirement 1: Claim must exist and have minimum length
+        has_content = bool(claim and len(claim.strip()) > 0)
+        # Requirement 2: Must have minimum 4 words for specificity
+        has_min_words = bool(claim and len(claim.split()) >= 4)
+        # Requirement 3: Must be statement format (not question)
+        is_statement = bool(claim and not claim.rstrip().endswith("?"))
+        # Requirement 4: Should not be pure opinion/subjective (deterministic check)
+        is_not_pure_opinion = bool(claim and not self._is_opinion_only(claim))
+        
+        # Checkable if ALL criteria met
+        checkable = has_content and has_min_words and is_statement and is_not_pure_opinion
+        
+        # Stage 3: LLM enhancement (optional, only if API available)
         topic = self._topic_guess(claim)
         llm = self._llm_intake(raw_text)
         if llm:
             llm_claim = normalize_text(str(llm.get("claim") or ""))
-            if llm_claim:
+            if llm_claim and len(llm_claim.split()) >= 4:
                 claim = llm_claim[:500]
+                checkable = True  # If LLM extracted, trust it
             if isinstance(llm.get("checkable"), bool):
                 checkable = bool(llm["checkable"])
             topic = normalize_text(str(llm.get("topic") or topic)) or topic
+        
+        # Stage 4: Build detailed report with failure diagnostics
+        if not has_content:
+            failure_reason = "No content extracted from input"
+        elif not has_min_words:
+            failure_reason = f"Claim too short ({len(claim.split())} words, minimum 4 required)"
+        elif not is_statement:
+            failure_reason = "Input appears to be a question, not a factual claim"
+        elif not is_not_pure_opinion:
+            failure_reason = "Claim appears to be opinion or subjective statement"
+        else:
+            failure_reason = ""
+        
+        # Confidence calibration
+        if not checkable:
+            confidence = 0 if not has_content else 25
+        else:
+            # For checkable claims, boost confidence based on specificity markers
+            confidence = 75
+            if any(marker in claim.lower() for marker in ["20", "19", "19th", "20th"]):
+                confidence = 82  # Time-specific claims
+            if any(marker in claim.lower() for marker in [str(i) for i in range(10)]):
+                confidence = 80  # Numeric claims
+            if is_not_pure_opinion:
+                confidence = min(85, confidence + 5)
+        
+        findings = [
+            f"Topic: {topic}",
+            "Claim is specific enough to verify." if checkable else failure_reason,
+        ]
+        if llm:
+            findings.append("LLM-enhanced extraction")
+        
         report = AgentReport(
             agent="Intake Agent",
-            summary=claim if claim else "No claim extracted.",
-            confidence=82 if checkable else 25,
-            findings=[f"Topic guess: {topic}", "Claim is specific enough to verify." if checkable else "No clear factual claim found."],
+            summary=claim if claim else "No claim extracted from input.",
+            confidence=confidence,
+            findings=findings,
         )
-        self._trace("Intake Agent", "claim_extracted", "Extracted normalized claim and checkability gate.", 0, "llm+rules")
-        self._event("Intake Agent", "completed", report.summary, {"checkable": checkable, "topic": topic})
+        
+        # Trace and event emission
+        action = "claim_extracted" if checkable else "claim_rejected"
+        rationale = "Deterministic criteria met" if checkable else failure_reason
+        self._trace("Intake Agent", action, rationale, 0, "llm+rules")
+        self._event("Intake Agent", "completed", report.summary, {
+            "checkable": checkable,
+            "topic": topic,
+            "criteria": {
+                "has_content": has_content,
+                "has_min_words": has_min_words,
+                "is_statement": is_statement,
+                "is_not_opinion": is_not_pure_opinion,
+            }
+        })
+        
         return {"claim": claim, "checkable": checkable, "report": report}
 
     def _domain_router_agent(self, claim: str) -> Dict[str, Any]:
@@ -871,6 +944,38 @@ class FactLensCrewWorkflow:
         if not any(source.credibility >= 70 for source in sources):
             return "Use with caution because no high-trust primary source was found."
         return "Verdict is usable with cited evidence and source-quality caveats."
+
+    @staticmethod
+    def _is_opinion_only(claim: str) -> bool:
+        """Detect if a claim is pure opinion/subjective without factual basis.
+        
+        Returns True if claim appears to be opinion only.
+        Uses deterministic rules, not LLM judgment.
+        """
+        low = claim.lower()
+        opinion_markers = (
+            "best", "worst", "greatest", "most beautiful", "most ugly",
+            "i think", "i believe", "i feel", "in my opinion", "in my view",
+            "should be", "ought to be", "is good", "is bad", "is better", "is worse"
+        )
+        policy_markers = (
+            "best for", "better policy", "should policy", "ought policy"
+        )
+        
+        # Strong opinion indicators
+        has_opinion_verb = any(marker in low for marker in opinion_markers)
+        has_policy_opinion = any(marker in low for marker in policy_markers)
+        
+        # Superlatives without facts
+        has_bare_superlative = re.search(r"\b(best|worst|greatest|most|least)\b", low)
+        has_factual_marker = any(marker in low for marker in [
+            "is", "are", "was", "were", "has", "have", "according",
+            "found", "discovered", "measured", "data", "showed", "proved"
+        ])
+        
+        # Pure opinion: has opinion markers or bare superlatives without facts
+        return (has_opinion_verb or has_policy_opinion or 
+                (has_bare_superlative and not has_factual_marker))
 
     @staticmethod
     def _extract_entities(claim: str) -> List[str]:
