@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Iterable, List
 
 from .schemas import EvidenceItem
+from .llm import generate_gemini_json
 
 
 TRUSTED_DOMAINS = (
@@ -143,6 +144,8 @@ TEMPORAL_WEIGHTS = (
     (999, 0.40),
 )
 
+_TRANSLATION_CACHE: dict[str, str] = {}
+
 
 def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()
@@ -165,14 +168,89 @@ def extract_pdf_text(path: str, max_chars: int = 12000, page_spec: str = "") -> 
     return normalize_text(" ".join(chunks))[:max_chars]
 
 
-def extract_image_text(path: str) -> str:
+def extract_pdf_sections(path: str, max_chars: int = 12000, page_spec: str = "", max_sections: int = 16) -> List[dict]:
+    """Extract section-like chunks from PDF with page metadata."""
+    try:
+        import fitz  # type: ignore
+    except Exception:
+        return []
+
+    sections: List[dict] = []
+    used = 0
+    with fitz.open(path) as doc:
+        indices = _parse_pdf_page_spec(page_spec, len(doc))
+        for idx in indices:
+            page = doc[idx]
+            blocks = page.get_text("blocks") or []
+            # sort by top-to-bottom then left-to-right
+            blocks = sorted(blocks, key=lambda b: (float(b[1]), float(b[0])))
+            for block in blocks:
+                text = normalize_text(block[4] if len(block) > 4 else "")
+                if not text or len(text.split()) < 5:
+                    continue
+                if re.match(r"^(page|figure|table)\b", text.lower()):
+                    continue
+                heading_guess = bool(re.match(r"^[A-Z][A-Z0-9\\s:,_-]{6,}$", text[:90])) or len(text.split()) <= 10
+                chunk = text[:800]
+                sections.append(
+                    {
+                        "page": idx + 1,
+                        "heading_guess": heading_guess,
+                        "text": chunk,
+                    }
+                )
+                used += len(chunk)
+                if len(sections) >= max_sections or used >= max_chars:
+                    break
+            if len(sections) >= max_sections or used >= max_chars:
+                break
+    return sections
+
+
+def _detect_script_hint(text: str) -> str:
+    if re.search(r"[\u0900-\u097F]", text):
+        return "hin"
+    if re.search(r"[\u0C80-\u0CFF]", text):
+        return "kan"
+    if re.search(r"[\u0D00-\u0D7F]", text):
+        return "mal"
+    if re.search(r"[\u0B80-\u0BFF]", text):
+        return "tam"
+    if re.search(r"[\u0C00-\u0C7F]", text):
+        return "tel"
+    return "eng"
+
+
+def extract_image_text(path: str, preferred_lang: str = "") -> str:
     try:
         import pytesseract  # type: ignore
         from PIL import Image  # type: ignore
     except Exception:
         return ""
 
-    return normalize_text(pytesseract.image_to_string(Image.open(path)))
+    image = Image.open(path)
+    lang_candidates: List[str] = []
+    pref = normalize_text(preferred_lang).lower()
+    if pref:
+        lang_candidates.extend([pref, f"eng+{pref}"])
+    lang_candidates.extend(["eng", "eng+hin", "eng+kan", "eng+mal", "eng+tam", "eng+tel"])
+
+    seen = set()
+    ordered = []
+    for lang in lang_candidates:
+        if lang and lang not in seen:
+            seen.add(lang)
+            ordered.append(lang)
+
+    best = ""
+    for lang in ordered:
+        try:
+            text = normalize_text(pytesseract.image_to_string(image, lang=lang))
+            if len(text) > len(best):
+                best = text
+        except Exception:
+            continue
+    return best
 
 
 def extract_file_text(path: str, pdf_pages: str = "") -> str:
@@ -186,6 +264,44 @@ def extract_file_text(path: str, pdf_pages: str = "") -> str:
         return normalize_text(Path(path).read_text(encoding="utf-8", errors="ignore"))
     except Exception:
         return ""
+
+
+def extract_file_payload(path: str, pdf_pages: str = "") -> dict:
+    """Return extracted text plus diagnostics for OCR/PDF inputs."""
+    mime, _ = mimetypes.guess_type(path)
+    ext = Path(path).suffix.lower()
+    meta = {"kind": "text", "chars": 0}
+
+    if ext == ".pdf" or mime == "application/pdf":
+        text = extract_pdf_text(path, page_spec=pdf_pages)
+        sections = extract_pdf_sections(path, page_spec=pdf_pages)
+        meta.update({"kind": "pdf", "page_spec": normalize_text(pdf_pages) or "default_first_pages"})
+        try:
+            import fitz  # type: ignore
+
+            with fitz.open(path) as doc:
+                indices = _parse_pdf_page_spec(pdf_pages, len(doc))
+                meta["pages_total"] = len(doc)
+                meta["pages_used"] = len(indices)
+        except Exception:
+            pass
+        meta["sections_count"] = len(sections)
+        if sections:
+            top_pages = sorted({int(s.get("page") or 0) for s in sections if s.get("page")})[:5]
+            meta["section_pages"] = top_pages
+        meta["chars"] = len(text)
+        return {"text": text, "meta": meta, "sections": sections}
+
+    if ext in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"} or str(mime or "").startswith("image/"):
+        raw = extract_image_text(path)
+        lang = _detect_script_hint(raw)
+        best = extract_image_text(path, preferred_lang=lang)
+        meta.update({"kind": "image", "ocr_lang": lang, "chars": len(best)})
+        return {"text": best, "meta": meta}
+
+    text = extract_file_text(path, pdf_pages=pdf_pages)
+    meta["chars"] = len(text)
+    return {"text": text, "meta": meta}
 
 
 def _source_type(url: str) -> str:
@@ -276,6 +392,14 @@ def search_web(query: str, max_results: int = 5) -> List[EvidenceItem]:
     if rows:
         return rows
 
+    rows = _search_gemini_grounding(query, max_results=max_results)
+    if rows:
+        return rows
+
+    rows = _search_duckduckgo(query, max_results=max_results)
+    if rows:
+        return rows
+
     google_key = os.getenv("GOOGLE_SEARCH_API_KEY", "").strip()
     google_cx = os.getenv("GOOGLE_SEARCH_CX", "").strip()
     wiki_first = os.getenv("GOOGLE_WIKIPEDIA_ONLY", "0").strip().lower() in {"1", "true", "yes", "on"}
@@ -290,14 +414,6 @@ def search_web(query: str, max_results: int = 5) -> List[EvidenceItem]:
         rows = _search_google_cse(f"{query} site:wikipedia.org", google_key, google_cx, max_results=max_results)
         if rows:
             return rows
-
-    rows = _search_duckduckgo(query, max_results=max_results)
-    if rows:
-        return rows
-
-    rows = _search_gemini_grounding(query, max_results=max_results)
-    if rows:
-        return rows
 
     tavily_key = os.getenv("TAVILY_API_KEY", "").strip()
     if tavily_key:
@@ -346,6 +462,19 @@ def _search_google_cse(query: str, api_key: str, cx: str, max_results: int = 5) 
 
 
 def classify_claim_domain(claim: str) -> str:
+    # LLM-first semantic routing to avoid brittle keyword-only classification.
+    prompt = (
+        "Classify this claim into exactly one domain for retrieval routing.\n"
+        "Allowed values: economy, population, health, politics, science, general.\n"
+        "Return JSON only with key domain.\n\n"
+        f"Claim: {claim}"
+    )
+    llm = generate_gemini_json(prompt, "GEMINI_INTAKE_MODEL", "gemini-2.5-flash")
+    domain = normalize_text(str(llm.get("domain") or "")).lower()
+    if domain in {"economy", "population", "health", "politics", "science", "general"}:
+        return domain
+
+    # Fallback heuristic remains as safety if LLM is unavailable/invalid.
     low = normalize_text(claim).lower()
     if any(token in low for token in ("gdp", "economy", "inflation", "unemployment", "fiscal", "imf", "world bank")):
         return "economy"
@@ -361,6 +490,10 @@ def classify_claim_domain(claim: str) -> str:
 
 
 def routed_queries(claim: str, domain: str) -> List[str]:
+    llm_plan = _llm_query_plan(claim, domain)
+    if llm_plan:
+        return llm_plan[:5]
+
     facts = extract_claim_facts(claim)
     intent = facts.get("intent_query") or ""
     year = facts.get("year")
@@ -369,50 +502,250 @@ def routed_queries(claim: str, domain: str) -> List[str]:
     rank_hint = f"{rank} largest" if rank else ""
     year_hint = str(year) if year else "latest"
     common_compare = f"{country} {rank_hint} {year_hint}".strip()
+    base: List[str]
     if domain == "economy":
-        return [
+        base = [
             f"{claim} {intent} {common_compare} site:imf.org OR site:worldbank.org OR site:oecd.org OR site:fred.stlouisfed.org",
             f"{claim} {common_compare} nominal GDP ranking official statistics",
             f"{claim} {common_compare} Reuters AP Bloomberg",
         ]
-    if domain == "population":
-        return [
+    elif domain == "population":
+        base = [
             f"{claim} {intent} {common_compare} site:worldbank.org OR site:un.org OR site:census.gov OR site:data.gov.in",
             f"{claim} {common_compare} official census demographic estimate",
             f"{claim} {common_compare} peer reviewed demographic data",
         ]
-    if domain == "health":
-        return [
+    elif domain == "health":
+        base = [
             f"{claim} {intent} {common_compare} site:who.int OR site:cdc.gov OR site:nih.gov OR site:thelancet.com",
             f"{claim} {common_compare} public health dataset",
             f"{claim} {common_compare} systematic review",
         ]
-    if domain == "politics":
-        return [
+    elif domain == "politics":
+        base = [
             f"{claim} {intent} {common_compare} site:eci.gov.in OR site:parliament.uk OR site:gov.in OR site:gov",
             f"{claim} {common_compare} official statement transcript",
             f"{claim} {common_compare} Reuters AP fact check",
         ]
-    if domain == "science":
-        return [
+    elif domain == "science":
+        base = [
             f"{claim} {intent} {common_compare} site:nasa.gov OR site:noaa.gov OR site:nature.com OR site:sciencedirect.com",
             f"{claim} {common_compare} educational institution source",
             f"{claim} {common_compare} scientific consensus",
         ]
-    return [
-        f"{claim} {intent}",
-        f"{claim} {common_compare} official source",
-        f"{claim} {common_compare} reputable news",
+    else:
+        base = [
+            f"{claim} {intent}",
+            f"{claim} {common_compare} official source",
+            f"{claim} {common_compare} reputable news",
+        ]
+
+    # Multilingual claim support: prioritize translated English retrieval
+    # queries, while preserving original-language backup queries.
+    if any(ord(ch) > 127 for ch in claim):
+        translated = _translate_claim_to_english(claim)
+        if translated and translated.lower() != claim.lower():
+            pref = [
+                f"{translated} official source fact check",
+                f"{translated} Reuters AP IMF World Bank",
+                f"{translated} site:gov OR site:edu OR site:who.int OR site:worldbank.org OR site:reuters.com",
+            ]
+            base = pref + base
+        base.append(f"{claim} fact check official source")
+    return dedupe_str(base)
+
+
+def _llm_query_plan(claim: str, domain: str) -> List[str]:
+    translated = _translate_claim_to_english(claim)
+    translated = translated if translated else claim
+    prompt = (
+        "You are Query Planner Agent for fact-check retrieval.\n"
+        "Generate EXACTLY 5 queries using these fixed keys:\n"
+        "1) original_query\n"
+        "2) primary_source_query\n"
+        "3) refutation_query\n"
+        "4) entity_keyword_query\n"
+        "5) translated_query\n\n"
+        "Primary source definition (strict): origin authority that publishes the original fact/value.\n"
+        "Priority order:\n"
+        "- official institutions/regulators/stat agencies (.gov, central banks, IMF/World Bank/OECD/UN)\n"
+        "- original dataset/report/statistical release pages\n"
+        "- first-party official documents/transcripts\n"
+        "- only if missing/conflicting, use top-tier wire corroboration\n\n"
+        "Do not assume extra country/year/metric unless present in claim.\n"
+        "Return JSON only with these exact keys and string values.\n\n"
+        f"Claim: {claim}\nDomain hint: {domain}"
+    )
+    out = generate_gemini_json(prompt, "GEMINI_INTAKE_MODEL", "gemini-2.5-flash")
+    keys = [
+        "original_query",
+        "primary_source_query",
+        "refutation_query",
+        "entity_keyword_query",
+        "translated_query",
     ]
+    rows: List[str] = []
+    for key in keys:
+        value = normalize_text(str(out.get(key) or ""))
+        if value:
+            rows.append(value)
+    # Guarantee fixed-size output even if model omits some keys.
+    if len(rows) < 5:
+        fallback = [
+            f"{claim} official source",
+            f"{claim} site:imf.org OR site:worldbank.org OR site:oecd.org OR site:un.org",
+            f"{claim} actual rank not claim verification",
+            f"{claim} entities metric year comparison",
+            translated,
+        ]
+        rows = dedupe_str(rows + fallback)
+    return rows[:5]
+
+
+def dedupe_str(items: List[str]) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for item in items:
+        key = normalize_text(item).lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def _token_set(text: str) -> set[str]:
+    return {t for t in re.findall(r"[a-z0-9]+", normalize_text(text).lower()) if len(t) > 2}
+
+
+def _mmr_select(items: List[EvidenceItem], claim: str, top_k: int = 12, lambda_mult: float = 0.70) -> List[EvidenceItem]:
+    if not items:
+        return []
+    claim_tok = _token_set(claim)
+    pool = list(items)
+    selected: List[EvidenceItem] = []
+    selected_tok: List[set[str]] = []
+
+    def relevance(it: EvidenceItem) -> float:
+        base = max(0.0, min(1.0, float(it.relevance or it.extract_score or 0.0)))
+        cred = max(0.0, min(1.0, float(it.credibility or 0) / 100.0))
+        text_tok = _token_set(f"{it.title} {it.snippet}")
+        overlap = (len(claim_tok & text_tok) / max(1, len(claim_tok))) if claim_tok else 0.0
+        return 0.45 * base + 0.35 * cred + 0.20 * overlap
+
+    def redundancy(it: EvidenceItem) -> float:
+        if not selected:
+            return 0.0
+        t = _token_set(f"{it.title} {it.snippet}")
+        if not t:
+            return 0.0
+        sims = [len(t & s) / max(1, len(t | s)) for s in selected_tok]
+        return max(sims) if sims else 0.0
+
+    while pool and len(selected) < top_k:
+        best = None
+        best_score = -1e9
+        for it in pool:
+            score = lambda_mult * relevance(it) - (1.0 - lambda_mult) * redundancy(it)
+            if score > best_score:
+                best_score = score
+                best = it
+        if best is None:
+            break
+        selected.append(best)
+        selected_tok.append(_token_set(f"{best.title} {best.snippet}"))
+        pool.remove(best)
+    return selected
+
+
+def _translate_claim_to_english(claim: str) -> str:
+    claim = normalize_text(claim)
+    if not claim:
+        return ""
+    if claim in _TRANSLATION_CACHE:
+        return _TRANSLATION_CACHE[claim]
+
+    # Skip call for already-ascii input.
+    if all(ord(ch) < 128 for ch in claim):
+        _TRANSLATION_CACHE[claim] = claim
+        return claim
+
+    project = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "").strip()
+    model = os.getenv("GEMINI_TRANSLATE_MODEL", os.getenv("GEMINI_SEARCH_MODEL", "gemini-2.5-flash")).strip() or "gemini-2.5-flash"
+    if not project or not location:
+        _TRANSLATION_CACHE[claim] = ""
+        return ""
+
+    token = _get_gcloud_access_token()
+    if not token:
+        _TRANSLATION_CACHE[claim] = ""
+        return ""
+
+    url = (
+        f"https://{location}-aiplatform.googleapis.com/v1/"
+        f"projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent"
+    )
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    prompts = [
+        (
+            "Translate the following claim into ONE complete English sentence for fact-check retrieval.\n"
+            "Preserve entities, numbers, places, dates, and key action.\n"
+            "Do NOT summarize to keywords.\n"
+            "Output only translated sentence, no markdown, no JSON.\n\n"
+            f"Claim: {claim}"
+        ),
+        (
+            "Rewrite this non-English claim in clear English with 12-24 words.\n"
+            "Must include who/what/where/when details if present.\n"
+            "Output plain English sentence only.\n\n"
+            f"Claim: {claim}"
+        ),
+    ]
+    best = ""
+    for prompt in prompts:
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.0, "maxOutputTokens": 256},
+        }
+        try:
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=max(3, int(os.getenv("GEMINI_CALL_TIMEOUT_SECONDS", "20")))) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            text = normalize_text(_extract_vertex_text(data))
+            text = normalize_text(text.splitlines()[0] if text else "").strip("\"' ")
+            if len(text.split()) > len(best.split()):
+                best = text
+            if len(best.split()) >= 8:
+                break
+        except Exception:
+            continue
+    if len(best.split()) < 4:
+        best = claim
+    _TRANSLATION_CACHE[claim] = best
+    return best
 
 
 def search_web_routed(claim: str, domain: str, max_results: int = 8) -> List[EvidenceItem]:
     pool: List[EvidenceItem] = []
-    for query in routed_queries(claim, domain)[:2]:
+    for query in routed_queries(claim, domain)[:3]:
         pool.extend(_safe_search_web(query, max_results=max(3, max_results // 2)))
         if len(dedupe_sources(pool)) >= max_results:
             break
-    return filter_domains(dedupe_sources(pool))[:max_results]
+    deduped = filter_domains(dedupe_sources(pool))
+    if deduped:
+        return deduped[:max_results]
+
+    # Fallback 1: direct claim search (helps multilingual/OCR claims).
+    fallback_pool = _safe_search_web(claim, max_results=max_results)
+    deduped = filter_domains(dedupe_sources(fallback_pool))
+    if deduped:
+        return deduped[:max_results]
+
+    # Fallback 2: broad English instruction query.
+    broad = _safe_search_web(f"fact check claim official sources: {claim}", max_results=max_results)
+    deduped = filter_domains(dedupe_sources(broad))
+    return deduped[:max_results]
 
 
 def filter_domains(items: Iterable[EvidenceItem]) -> List[EvidenceItem]:
@@ -518,6 +851,8 @@ def gather_api_evidence(claim: str, domain: str) -> List[EvidenceItem]:
 
 def gather_web_scrape_evidence(claim: str, domain: str, max_results: int = 4) -> List[EvidenceItem]:
     seeds = search_web_routed(claim, domain=domain, max_results=max_results)
+    if not seeds:
+        seeds = _safe_search_web(claim, max_results=max_results)
     out: List[EvidenceItem] = []
     for seed in seeds[:max_results]:
         text = scrape_url(seed.url, max_chars=1800)

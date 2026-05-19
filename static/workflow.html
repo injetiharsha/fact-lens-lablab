@@ -19,6 +19,9 @@
     .run{flex:1;background:#fff;color:#000;}
     .kv{margin-top:8px;font:12px "Consolas",monospace;color:#ddd;}
     .timeline{border:1px solid var(--line);border-radius:10px;background:#000;max-height:250px;overflow:auto;padding:8px;font:12px/1.45 "Consolas",monospace;}
+    .score-table{width:100%;border-collapse:collapse;font:12px "Consolas",monospace;}
+    .score-table th,.score-table td{border-bottom:1px solid #232323;padding:6px;text-align:left;vertical-align:top;}
+    .score-table th{color:#cfcfcf;font-weight:700;}
     .tag{display:inline-block;padding:2px 7px;border-radius:999px;border:1px solid #555;font-size:10px;color:#ddd;}
     .tag.started{color:#8fd3ff;border-color:#2d5f7d;background:#07131c;}
     .tag.running,.tag.file_extracted{color:#9ef5ff;border-color:#2f6f76;background:#061416;}
@@ -101,16 +104,16 @@
 <body>
   <main class="app">
     <aside class="left">
-      <section class="sec"><p class="eyebrow">Collaborative Systems</p><h1>FactLens Workflow Map</h1><p>Expanded mesh + local logos + detailed hover.</p></section>
-      <section class="sec"><h2>Run Claim</h2><textarea id="claim">India is the 4th largest economy in 2026</textarea><div class="row"><select id="inputKind" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="text">Text</option><option value="image">Image (OCR)</option><option value="pdf">PDF</option></select><input id="wfFile" type="file" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:8px;font:12px Consolas,monospace;"></div><div class="row"><select id="cacheMode" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="off">Cache: Off (no read/no write)</option><option value="read">Cache: Read only</option><option value="write">Cache: Write only</option><option value="read_write">Cache: Read + Write</option><option value="update">Cache: Update</option><option value="auto">Cache: Auto</option></select></div><div class="row" style="align-items:center;"><label style="font:12px Consolas,monospace;color:#ddd;display:flex;gap:8px;align-items:center;"><input type="checkbox" id="forceRecheck" /> Force live recheck (ignore cache hit)</label></div><div class="row"><button id="run" class="run">Run Workflow</button><button id="cancelRun">Cancel Analysis</button><button id="reset">Reset</button></div><div class="row"><a href="/backend-live.html" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;border:1px solid #2b2b2b;border-radius:10px;background:#111;color:#fff;padding:8px 10px;font:700 12px Consolas,monospace;text-transform:uppercase;">Open Backend Live</a><a href="/storage-live.html" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;border:1px solid #2b2b2b;border-radius:10px;background:#111;color:#fff;padding:8px 10px;font:700 12px Consolas,monospace;text-transform:uppercase;">Open Stored Data</a></div><div id="summary" class="kv">Status: idle</div><div id="formatSummary" class="kv">Evidence formats: canonical schema active (awaiting run).</div></section>
+      <section class="sec"><p class="eyebrow">Collaborative Systems</p><h1>FactLens Workflow Map</h1><p>Agentic fact-checking pipeline.</p></section>
+      <section class="sec"><h2>Run Claim</h2><textarea id="claim">India is the 4th largest economy in 2026</textarea><div class="row"><select id="inputKind" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="text">Text</option><option value="image">Image OCR</option><option value="pdf">PDF</option></select><input id="wfFile" type="file" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:8px;font:12px Consolas,monospace;"></div><div class="row"><select id="cacheMode" style="flex:1;border:1px solid #2b2b2b;border-radius:10px;background:#000;color:#fff;padding:10px;font:12px Consolas,monospace;"><option value="off">Cache Off</option><option value="read">Cache Read</option><option value="write">Cache Write</option><option value="read_write">Cache Read+Write</option><option value="update">Cache Update</option><option value="auto">Cache Auto</option></select></div><div class="row" style="align-items:center;"><label style="font:12px Consolas,monospace;color:#ddd;display:flex;gap:8px;align-items:center;"><input type="checkbox" id="forceRecheck" /> Force live recheck</label></div><div class="row"><button id="run" class="run">Run Workflow</button><button id="cancelRun">Cancel Analysis</button><button id="reset">Reset</button></div><div class="row"><a href="/backend-live.html" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;border:1px solid #2b2b2b;border-radius:10px;background:#111;color:#fff;padding:8px 10px;font:700 12px Consolas,monospace;text-transform:uppercase;">Open Backend Live</a><a href="/storage-live.html" target="_blank" rel="noopener noreferrer" style="display:inline-block;text-decoration:none;border:1px solid #2b2b2b;border-radius:10px;background:#111;color:#fff;padding:8px 10px;font:700 12px Consolas,monospace;text-transform:uppercase;">Open Stored Data</a></div><div id="summary" class="kv">Status: idle</div><div id="formatSummary" class="kv">Evidence formats: canonical schema active.</div></section>
       <section class="sec"><h2>Step Details</h2><div id="inspector" class="kv">Select node.</div></section>
+      <section class="sec"><h2>Scoring Snapshot</h2><table class="score-table"><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody id="scoreTable"><tr><td colspan="2" style="color:#a9a9a9">No run yet</td></tr></tbody></table></section>
       <section class="sec"><h2>Workflow History</h2><div id="timeline" class="timeline">Waiting for run...</div></section>
     </aside>
     <section id="canvas" class="canvas">
       <div id="world"><svg id="edges" viewBox="0 0 14600 7600"></svg></div>
       <div id="totalTimer" class="total">Total: 00:00.0</div>
       <div class="mode"><button id="fullBtn">Full Pipeline</button></div>
-      <div class="mode" style="top:114px;"><button id="devBtn">Dev: Off</button></div>
       <div id="verdict" class="verdict">Verdict: waiting | Confidence: 0%</div>
       <div class="nav"><button id="prevStep" title="Previous">&#8592;</button><button id="nextStep" title="Next">&#8594;</button></div>
       <div class="viewport-nav">
@@ -124,43 +127,36 @@
       </div>
     </section>
   </main>
-  <div id="devPanel" class="hover-card" style="display:none; right:16px; left:auto; top:160px; position:fixed; max-width:420px;">
-    <div class="hover-sec"><h4>Dev Layout</h4><p id="devInfo">Select a node, then use arrow keys.</p></div>
-    <div class="hover-sec">
-      <button id="copyCoords">Copy Current Mode Coords</button>
-      <button id="saveCoords" style="margin-left:8px;">Save Layout File</button>
-    </div>
-  </div>
   <div id="hoverCard" class="hover-card"></div>
   <script>
     const LOGO = (n) => `/assets/logos/${n}`;
     const AGENT_INFO = {
-      "System": { role:"Orchestrator + run lifecycle", explain:"Controls execution timeline and event stream.", rules:["Ordered events","One bounded retry","No fabricated verdict"], apis:["FastAPI","Python runtime","Run Store"], outputs:["run_id","events","status"], logos:[["FastAPI",LOGO("fastapi.svg")],["Python",LOGO("python.svg")]] },
-      "Intake Agent": { role:"Claim extraction", explain:"Builds one checkable claim from input text/file.", rules:["Normalize text","Checkability gate","No ambiguity carry"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["claim","checkable","topic"], logos:[["Gemini",LOGO("gemini.svg")],["Google",LOGO("google.svg")]] },
-      "Domain Router Agent": { role:"Route selection", explain:"Chooses domain-aware retrieval route.", rules:["Semantic route","No verdict logic"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["domain route","claim mode"], logos:[["Gemini",LOGO("gemini.svg")]] },
-      "Web Research Agent": { role:"Broad web retrieval", explain:"Finds contextual evidence from web index providers.", rules:["Cited URL only","Blacklist filter"], apis:["Google CSE API","DuckDuckGo","Tavily (optional)"], outputs:["web evidence"], logos:[["Web",LOGO("search-logo.webp")],["Google",LOGO("google.svg")],["DuckDuckGo",LOGO("duckduckgo.svg")]] },
-      "Primary Source Agent": { role:"High-trust retrieval", explain:"Targets institutional/official sources.", rules:["Prefer gov/edu/org","Prioritize reference/trusted"], apis:["Google CSE API","World Bank"], outputs:["trusted evidence"], logos:[["Web",LOGO("search-logo.webp")],["Trusted",LOGO("worldbank.svg")],["Google",LOGO("google.svg")]] },
-      "Data Extractor Agent": { role:"Claim-driven extraction", explain:"Extracts comparable facts from API + pages and normalizes mixed records.", rules:["Preserve provenance","Extract structured fields","Normalize to canonical EvidenceItem"], apis:["World Bank API","Scraper"], outputs:["api_data/web_scrape evidence"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
+      "System": { display_name:"System Orchestrator", role:"Orchestrator + run lifecycle", explain:"Controls execution timeline, retry loop, cache branch, and event stream.", rules:["Ordered stage execution","Max one rebuttal retry","No fabricated verdict when live evidence missing"], inputs:["Run request","Claim/file payload","Runtime config"], apis:["FastAPI","Python runtime","Run Store"], outputs:["run_id","events[]","final status","stage metrics"], behavior:["Starts run","routes input to Intake","handles cancel/retry/cache/memory tail"], logos:[["FastAPI",LOGO("fastapi.svg")],["Python",LOGO("python.svg")]] },
+      "Intake Agent": { display_name:"Claim Intake & Checkability", role:"Claim extraction", explain:"Builds one checkable claim from input text/OCR/PDF extract.", rules:["Normalize and sanitize text","Checkability gate","Do not invent missing claim context"], inputs:["raw normalized input text"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["claim","checkable","topic"], behavior:["Extracts single best claim","sets checkable flag","emits topic hint"], logos:[["Gemini",LOGO("gemini.svg")],["Google",LOGO("google.svg")]] },
+      "Domain Router Agent": { display_name:"Semantic Domain Router", role:"Route selection", explain:"Chooses retrieval domain and claim mode for tri-search strategy.", rules:["Semantic routing only","No verdicting","No hardcoded single-claim behavior"], inputs:["normalized claim"], apis:["Gemini 2.5 Flash (GEMINI_INTAKE_MODEL)"], outputs:["domain","claim_type"], behavior:["Selects domain","sets retrieval budget profile by claim type"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "Web Research Agent": { display_name:"Web Scout", role:"Broad web retrieval", explain:"Finds contextual evidence from web index providers and fallback stack.", rules:["Cited URL evidence only","Blacklist/filter low-quality domains","No unsupported synthesis"], inputs:["claim","domain","similar-claim hints (optional)"], apis:["Vertex Grounding","Gemini Grounding","DuckDuckGo","Google CSE","Tavily(optional)"], outputs:["web evidence list","source channels used"], behavior:["Runs routed queries","collects broad corroboration","returns deduped evidence items"], logos:[["Web",LOGO("search-logo.webp")],["Google",LOGO("google.svg")],["DuckDuckGo",LOGO("duckduckgo.svg")]] },
+      "Primary Source Agent": { display_name:"Archive Hunter Primary Sources", role:"High-trust retrieval", explain:"Targets institutional/official primary sources and high-trust references.", rules:["Prefer original publishers of facts","Prefer institutional sources before media summaries","Preserve source provenance"], inputs:["claim","domain","similar-claim hints(optional)"], apis:["Google CSE API","World Bank","official domains"], outputs:["trusted/reference evidence"], behavior:["Queries primary-source focused routes","scores trust/relevance","returns high-trust shortlist"], logos:[["Web",LOGO("search-logo.webp")],["Trusted",LOGO("worldbank.svg")],["Google",LOGO("google.svg")]] },
+      "Data Extractor Agent": { display_name:"Structured Data Extractor", role:"Claim-driven extraction", explain:"Extracts comparable facts from APIs + deep pages and normalizes mixed records.", rules:["Preserve provenance","Extract structured comparable fields","Normalize to canonical EvidenceItem"], inputs:["claim","domain"], apis:["World Bank API","Trafilatura/Browser scrape"], outputs:["api_data evidence","web_scrape evidence"], behavior:["Pulls structured series","deep-scrapes supporting pages","normalizes records"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
       "Tri Consistency Agent": { role:"Cross-channel consistency", explain:"Measures overlap among trio channels.", rules:["Penalty on drift","Emit consistency score"], apis:["Local scorer"], outputs:["consistency"], logos:[["Python",LOGO("python.svg")],["Python",LOGO("python.svg")]] },
-      "Evidence Aggregator Agent": { role:"Consistency-aware aggregation", explain:"Balanced merge across channels into one canonical evidence schema.", rules:["Channel caps","Diversity retention","Normalize mixed formats"], apis:["Local aggregator"], outputs:["raw evidence pool (canonical)"], logos:[["JSON",LOGO("json-logo.png")],["Table",LOGO("databricks.svg")],["Web",LOGO("search-logo.webp")]] },
-      "Skeptic Agent": { role:"Counter-checks", explain:"Challenges weak/contradictory evidence.", rules:["No assumption","Escalate uncertainty"], apis:["Featherless model (FEATHERLESS_MODEL)","Gemini fallback"], outputs:["objections"], logos:[["Featherless",LOGO("featherless.png")],["ChatGPT",LOGO("chatgpt-logo.webp")],["Gemini",LOGO("gemini.svg")]] },
-      "Source Quality Agent": { role:"Deterministic scoring", explain:"Applies relevance/credibility/recency/diversity rules.", rules:["Credibility x relevance x temporal","Domain cap + blacklist"], apis:["Rule engine"], outputs:["audited evidence pool"], logos:[["Python",LOGO("python.svg")],["Python",LOGO("python.svg")]] },
-      "Stat Comparator Agent": { role:"Evidence-vs-claim compare", explain:"Strict compare from provided evidence only.", rules:["No assumptions","JSON-only structured compare"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["comparator verdict"], logos:[["Gemini",LOGO("gemini.svg")]] },
-      "Consensus Moderator Agent": { role:"Final arbitration", explain:"Produces final verdict and confidence under guardrails.", rules:["Obey quality/comparator gates","Insufficient when uncertain"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["verdict","confidence","explanation"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "Evidence Aggregator Agent": { role:"Cross-channel evidence fusion", explain:"Merges Web Scout + Primary Source + Data Extractor outputs into a single canonical pool. Applies channel balancing, deduplication, low-consistency pruning, then MMR re-ranking (relevance + diversity) before scoring.", rules:["Per-channel capped merge (prevents one source type domination)","Deduplicate by URL/domain/title","If tri-consistency low, keep stronger/trusted evidence only","MMR final selection for diversity-aware relevance"], apis:["Local aggregation + MMR reranker"], outputs:["canonical_evidence_pool","channel_mix","mmr_selected_top_k"], logos:[["JSON",LOGO("json-logo.png")],["Table",LOGO("databricks.svg")],["Web",LOGO("search-logo.webp")]] },
+      "Skeptic Agent": { display_name:"Adversarial Reviewer (Skeptic)", role:"Counter-checks", explain:"Challenges weak, conflicting, or unsupported conclusions before final arbitration.", rules:["No assumptions outside evidence","Surface contradictions explicitly","Escalate unresolved uncertainty"], inputs:["aggregated evidence pool","claim"], apis:["Featherless model (FEATHERLESS_MODEL)","Gemini fallback"], outputs:["objections[]","risk notes"], behavior:["Finds conflict patterns","flags low-credibility reliance","feeds rebuttal trigger signal"], logos:[["Featherless",LOGO("featherless.png")],["ChatGPT",LOGO("chatgpt-logo.webp")],["Gemini",LOGO("gemini.svg")]] },
+      "Source Quality Agent": { display_name:"Evidence Auditor / Scoring", role:"Deterministic scoring", explain:"Applies relevance, credibility, temporal, and diversity penalties to produce audited pool.", rules:["EW = credibility x relevance x temporal x diversity","Blacklist + root-domain cap","Reject low-score evidence"], inputs:["aggregated evidence","skeptic notes"], apis:["Deterministic rule engine"], outputs:["audited evidence pool","average_credibility","trust_score_t","rejections"], behavior:["Scores each item","filters weak items","emits quality metrics for moderator"], logos:[["Python",LOGO("python.svg")],["Python",LOGO("python.svg")]] },
+      "Stat Comparator Agent": { display_name:"Numeric Comparator Guardrail", role:"Evidence-vs-claim compare", explain:"Strict numeric/rank comparison from provided evidence only.", rules:["No external assumptions","Return structured compare result","Prefer insufficient_evidence over guess"], inputs:["claim","audited evidence"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["comparator verdict","confidence","rationale"], behavior:["Extracts numeric assertions","checks rank/year/value consistency","can override moderator in statistical claims"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "Consensus Moderator Agent": { display_name:"Consensus Moderator", role:"Final arbitration", explain:"Produces final verdict and confidence under guardrails and conflict checks.", rules:["Obey source-quality gates","Apply comparator guardrail for statistical claims","Insufficient evidence when uncertain"], inputs:["all agent reports","audited evidence","comparator output"], apis:["Gemini 2.5 Flash (GEMINI_MODERATOR_MODEL)"], outputs:["verdict","confidence","explanation","conflict flag"], behavior:["Arbitrates support/refute/insufficient","triggers bounded retry when needed","finalizes decision"], logos:[["Gemini",LOGO("gemini.svg")]] },
       "Cache Policy Node": { role:"Cache mode gate", explain:"Applies per-run cache mode: off/read/write/read_write/update/auto.", rules:["Read mode may return cached result","Write mode persists run/evidence only","Auto picks read/update/write"], apis:["CACHE_MODE override"], outputs:["cache decision"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
       "Similar Claims Node": { role:"Similarity retrieval", explain:"Finds semantically similar past claims for retrieval bootstrap.", rules:["Token-overlap threshold","Top-K similar runs"], apis:["SQLite memory store"], outputs:["similar_claims"], logos:[["Search",LOGO("search-logo.webp")],["JSON",LOGO("json-logo.png")]] },
       "Run Store Node": { role:"Structured run persistence", explain:"Stores run_id, session_id, timings, evidence, and events.", rules:["Append run history","Persist evidence metadata"], apis:["SQLite run store"], outputs:["runs/evidence/events rows"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
       "Change Log Node": { role:"Drift changelog", explain:"Tracks what changed vs nearest historical claims and why.", rules:["Detect verdict drift","Track source-domain changes"], apis:["SQLite change_log"], outputs:["what_changed","why_changed"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
       "Trust Stats Node": { role:"Trust calibration memory", explain:"Updates per-domain trust stats from each run.", rules:["Aggregate credibility stats","Persist root-domain trends"], apis:["SQLite trust_stats"], outputs:["domain trust updates"], logos:[["JSON",LOGO("json-logo.png")],["Python",LOGO("python.svg")]] },
-      "Relevance Scorer": { role:"Sub-agent", explain:"Scores query-evidence semantic match.", rules:["Local deterministic score"], apis:["Rule engine"], outputs:["relevance"], logos:[["Python",LOGO("python.svg")]] },
-      "Temporal Scorer": { role:"Sub-agent", explain:"Applies age/recency weight.", rules:["Temporal weight policy"], apis:["Rule engine"], outputs:["temporal weight"], logos:[["Python",LOGO("python.svg")]] },
-      "Diversity Filter": { role:"Sub-agent", explain:"Penalizes source duplication and over-reliance.", rules:["Root domain cap"], apis:["Rule engine"], outputs:["diversity penalty"], logos:[["Python",LOGO("python.svg")]] },
-      "Query Planner": { role:"Sub-agent", explain:"Builds route-aware query variants.", rules:["No verdicting"], apis:["Gemini"], outputs:["query set"], logos:[["Python",LOGO("python.svg")]] },
-      "API Retriever": { role:"Sub-agent", explain:"Executes API retrieval path.", rules:["Preserve response provenance"], apis:["World Bank API"], outputs:["api rows"], logos:[["API",LOGO("api-logo.webp")]] },
-      "Scrape Retriever": { role:"Sub-agent", explain:"Executes deep scrape path.", rules:["Text extract + sanitize"], apis:["Scraper"], outputs:["scraped snippets"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
-      "Text Input Node": { role:"Input Sub-agent", explain:"Handles plain text claims.", rules:["Normalize text input","Strip noise"], apis:["FastAPI form"], outputs:["text payload"], logos:[["Python",LOGO("python.svg")]] },
-      "Image OCR Node": { role:"Input Sub-agent", explain:"Extracts text from images.", rules:["OCR extraction before intake","Preserve source type"], apis:["OCR/PyTesseract"], outputs:["ocr text"], logos:[["Tesseract OCR",LOGO("tesseract-ocr.jpg")]] },
-      "PDF Extract Node": { role:"Input Sub-agent", explain:"Extracts text from PDFs.", rules:["Parse PDF pages","Limit extraction budget"], apis:["PyMuPDF"], outputs:["pdf text"], logos:[["Python",LOGO("python.svg")]] },
+      "Relevance Scorer": { display_name:"Scoring Sub-Agent: Relevance", role:"Deterministic relevance scorer", explain:"Computes semantic relevance contribution for each evidence item.", rules:["Bounded score range [0,1]","No stance inference","No source trust override"], inputs:["claim","evidence text/title/snippet"], apis:["Local rule scorer"], outputs:["relevance_score per evidence item"], behavior:["Applies semantic relevance estimate","feeds EW calculation in Source Quality"], logos:[["Python",LOGO("python.svg")]] },
+      "Temporal Scorer": { display_name:"Scoring Sub-Agent: Temporal", role:"Deterministic temporal scorer", explain:"Applies recency/age weight using temporal policy.", rules:["Use temporal weight table","Science/history exceptions allowed","No content rewriting"], inputs:["evidence URL/date hints","claim context"], apis:["Local temporal policy"], outputs:["temporal_weight per evidence item"], behavior:["Extracts year/date signals","applies decay policy","feeds EW calculation"], logos:[["Python",LOGO("python.svg")]] },
+      "Diversity Filter": { display_name:"Scoring Sub-Agent: Domain Diversity", role:"Deterministic diversity penalty", explain:"Penalizes over-reliance on repeated root domains.", rules:["Root-domain cap","1st/2nd/3rd domain multiplier","4th+ filtered"], inputs:["evidence root domains","current domain counts"], apis:["Local diversity policy"], outputs:["diversity_multiplier","duplicate/domain-filter rejections"], behavior:["Tracks domain occurrence rank","applies multiplicative penalty","emits rejection counts"], logos:[["Python",LOGO("python.svg")]] },
+      "Query Planner": { display_name:"Retrieval Sub-Agent: Query Planner", role:"LLM query constructor", explain:"Builds fixed 5-query retrieval pack for every claim.", rules:["Fixed keys: original, primary_source, refutation, entity_keyword, translated","Primary-source strict definition","No verdict generation"], inputs:["claim","domain hint"], apis:["Gemini 2.5 Flash"], outputs:["5 structured queries"], behavior:["Generates mandatory query slots","ensures broad + primary + contradiction coverage"], logos:[["Gemini",LOGO("gemini.svg")]] },
+      "API Retriever": { display_name:"Retrieval Sub-Agent: API Retriever", role:"Structured API evidence fetcher", explain:"Fetches structured statistics/datasets from API providers.", rules:["Preserve raw provenance","No invented values","Normalize records to EvidenceItem"], inputs:["claim","domain","query plan"], apis:["World Bank API"], outputs:["api_data evidence rows"], behavior:["Calls API endpoints","selects best records","converts to canonical schema"], logos:[["API",LOGO("api-logo.webp")]] },
+      "Scrape Retriever": { display_name:"Retrieval Sub-Agent: Scrape Retriever", role:"Deep page extractor", explain:"Extracts text snippets from web pages for evidence enrichment.", rules:["Cited URL only","Content sanitization","No hallucinated snippets"], inputs:["claim","domain","query plan"], apis:["Trafilatura","Selenium","Playwright"], outputs:["web_scrape evidence snippets"], behavior:["Fetches pages","extracts salient text","returns normalized snippets"], logos:[["Trafilatura",LOGO("trafilatura.png")],["Selenium",LOGO("selenium.svg")],["Playwright",LOGO("playwright.svg")]] },
+      "Text Input Node": { display_name:"Input Node: Text", role:"Input normalization node", explain:"Processes plain-text claim input before intake.", rules:["Normalize whitespace/symbols","Preserve factual meaning","No summarization"], inputs:["user text claim"], apis:["FastAPI form parser"], outputs:["normalized text payload"], behavior:["Validates text input","forwards normalized payload to Intake"], logos:[["Python",LOGO("python.svg")]] },
+      "Image OCR Node": { display_name:"Input Node: Image OCR", role:"OCR extraction node", explain:"Extracts claim text from image inputs.", rules:["OCR first, then normalize","Preserve language script","Retain provenance as image"], inputs:["image file"], apis:["OCR/PyTesseract"], outputs:["ocr_extracted text payload"], behavior:["Runs OCR extraction","normalizes output","forwards to Intake"], logos:[["Tesseract OCR",LOGO("tesseract-ocr.jpg")]] },
+      "PDF Extract Node": { display_name:"Input Node: PDF Extract", role:"PDF parsing node", explain:"Extracts text from specified PDF pages/sections.", rules:["Respect page spec","Section-aware extraction","Limit extraction budget"], inputs:["pdf file","pdf_pages spec"], apis:["PyMuPDF"], outputs:["pdf_extracted text payload","page/section metadata"], behavior:["Parses selected pages","builds section snippets","forwards to Intake"], logos:[["Python",LOGO("python.svg")]] },
     };
     const MODELS = {
       flow1: [
@@ -314,7 +310,7 @@
       "Source Quality Agent": ["Relevance Scorer","Temporal Scorer","Diversity Filter"]
     };
     let orderedEvents=[], stepCursor=-1, running=false, startMs=0, mode="flow1", prevEventAgent="", activeInputNode="Text Input Node", eventCounter=0, currentRunId="";
-    let devMode=false, selectedNodeId="";
+    let selectedNodeId="";
     const findNode=(id)=>MODELS[mode].find(x=>x.id===id);
     const cssId=(id)=>id.replace(/[^a-zA-Z0-9_-]/g,"_");
     const fmt=(ms)=>{const s=ms/1000;const m=Math.floor(s/60);const r=(s%60).toFixed(4).padStart(7,"0");return `${String(m).padStart(2,"0")}:${r}`;}
@@ -612,29 +608,20 @@
       selectedNodeId=id;
       for(const [aid,c] of cardById.entries()) c.classList.toggle("active",aid===id);
       const st=stateById.get(id)||{};
-      inspector.textContent=`${id} | ${st.status||"waiting"} | ${st.message||""}`;
-      updateDevInfo();
-    }
-    function updateDevInfo(){
-      const infoEl=document.getElementById("devInfo"); if(!infoEl) return;
-      const n=findNode(selectedNodeId);
-      if(!n){ infoEl.textContent="Select a node, then use arrow keys."; return; }
-      infoEl.textContent=`${selectedNodeId} | x=${n.x}, y=${n.y} | mode=${mode} | step=${devMode?"10 (Shift=40)":"off"}`;
-    }
-    function moveSelected(dx,dy){
-      const n=findNode(selectedNodeId); if(!n) return;
-      n.x+=dx; n.y+=dy;
-      const card=cardById.get(selectedNodeId);
-      if(card){ card.style.left=`${n.x}px`; card.style.top=`${n.y}px`; }
-      renderEdges();
-      updateDevInfo();
+      const info=AGENT_INFO[id]||{};
+      const name=info.display_name||id;
+      const dataText = st.data && Object.keys(st.data).length ? `\nData: ${JSON.stringify(st.data, null, 2)}` : "";
+      inspector.textContent=`${name}\nState: ${st.status||"waiting"}\nMessage: ${st.message||""}${dataText}`;
     }
     function showHover(id,e){
       const info=AGENT_INFO[id]||{role:"",explain:"",rules:[],apis:[],outputs:[],logos:[]};
+      const name=info.display_name||id;
       const logos=(info.logos||[]).map(x=>`<span class='logo'><img src='${x[1]}' alt='${x[0]}' onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span>`).join("");
       const rules=(info.rules||[]).map(x=>`<li>${x}</li>`).join("");
       const outputs=(info.outputs||[]).map(x=>`<li>${x}</li>`).join("");
-      hoverCard.innerHTML=`<div class="hover-head"><span class="n8n-logo"><img src="${(info.logos?.[0]?.[1])||LOGO("vscode.svg")}" alt="${id}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span><h3>${id}</h3></div><p>${info.role}</p><p>${info.explain||""}</p><div class="hover-sec"><h4>Rules / Guardrails</h4><ul class="hover-list">${rules}</ul></div><div class="hover-sec"><h4>Outputs</h4><ul class="hover-list">${outputs}</ul></div><div class="hover-sec"><h4>APIs / Tools</h4>${(info.apis||[]).map(x=>`<span class='pill'>${x}</span>`).join("")}</div><div class="hover-sec"><h4>Integrations</h4><div class="logos">${logos}</div></div>`;
+      const inps=(info.inputs||["Upstream node payload","Current claim context"]).map(x=>`<li>${x}</li>`).join("");
+      const beh=(info.behavior||["Uses deterministic guardrails and emits structured event data."]).map(x=>`<li>${x}</li>`).join("");
+      hoverCard.innerHTML=`<div class="hover-head"><span class="n8n-logo"><img src="${(info.logos?.[0]?.[1])||LOGO("vscode.svg")}" alt="${id}" onerror="this.onerror=null;this.src='${LOGO("vscode.svg")}';"></span><h3>${name}</h3></div><p><span class='pill'>ID: ${id}</span></p><p>${info.role}</p><p>${info.explain||""}</p><div class="hover-sec"><h4>Rules / Guardrails</h4><ul class="hover-list">${rules}</ul></div><div class="hover-sec"><h4>Inputs</h4><ul class="hover-list">${inps}</ul></div><div class="hover-sec"><h4>Outputs</h4><ul class="hover-list">${outputs}</ul></div><div class="hover-sec"><h4>Detailed Behavior</h4><ul class="hover-list">${beh}</ul></div><div class="hover-sec"><h4>APIs / Tools</h4>${(info.apis||[]).map(x=>`<span class='pill'>${x}</span>`).join("")}</div><div class="hover-sec"><h4>Integrations</h4><div class="logos">${logos}</div></div>`;
       hoverCard.style.display="block"; moveHover(e);
     }
     function moveHover(e){hoverCard.style.left=`${Math.min(window.innerWidth-490,e.clientX+16)}px`; hoverCard.style.top=`${Math.min(window.innerHeight-260,e.clientY+16)}px`;}
@@ -805,6 +792,34 @@
       }
     }
     function normAgent(id){const map={"Moderator":"Consensus Moderator Agent","Rebuttal Research Agent":"Web Research Agent","Archive Hunter Agent":"Primary Source Agent","Web Scout Agent":"Web Research Agent","Evidence Auditor Agent":"Source Quality Agent"}; return map[id]||id;}
+    function verdictLabel(out){
+      const v=String(out?.verdict||"n/a");
+      const rel=String(out?.stance_reliability||"").replaceAll("_"," ");
+      return rel ? `${v} (${rel})` : v;
+    }
+    function updateScoreTable(out){
+      const el=document.getElementById("scoreTable"); if(!el) return;
+      const src=Array.isArray(out?.sources)?out.sources:[];
+      const avgCred = src.length ? Math.round(src.reduce((a,s)=>a+(Number(s.credibility)||0),0)/src.length) : 0;
+      const trusted = src.filter(s => (Number(s.credibility)||0) >= 80 || ["trusted","reference"].includes(String(s.source_type||"").toLowerCase())).length;
+      const domains = new Set(src.map(s=>{try{return new URL(s.url||"").hostname.replace(/^www\./,"")}catch{return ""}}).filter(Boolean)).size;
+      const rej = out?.evidence_rejections || {};
+      const rows = [
+        ["Verdict", out?.verdict || "n/a"],
+        ["Confidence", `${Number(out?.confidence||0)}%`],
+        ["Stance Score (-1..1)", String(out?.stance_score ?? 0)],
+        ["Stance Reliability", String(out?.stance_reliability || "n/a")],
+        ["Confidence Band", String(out?.confidence_band || "n/a")],
+        ["Evidence Count", String(src.length)],
+        ["Trusted Sources", String(trusted)],
+        ["Domain Diversity", String(domains)],
+        ["Avg Credibility", `${avgCred}/100`],
+        ["Rejected: low_relevance", String(rej.low_relevance || 0)],
+        ["Rejected: low_weight", String(rej.low_weight || 0)],
+        ["Rejected: duplicate", String(rej.duplicate || 0)],
+      ];
+      el.innerHTML = rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("");
+    }
 
     async function runWorkflow(){
       resetStates(); timeline.textContent="Starting async run...\n"; running=true; startMs=Date.now();
@@ -883,7 +898,8 @@
                 : `Status: completed | Verdict=${out.verdict||"n/a"} | Confidence=${out.confidence||0}% | Sources=${(out.sources||[]).length}`);
             verdictBox.textContent=st.status==="cancelled"
               ? "Verdict: cancelled | Confidence: 0%"
-              : `Verdict: ${out.verdict||"n/a"} | Confidence: ${out.confidence||0}%`;
+              : `Verdict: ${verdictLabel(out)} | Confidence: ${out.confidence||0}%`;
+            updateScoreTable(out);
             currentRunId="";
             try{ localStorage.removeItem("factlens_active_run"); }catch{}
             if(orderedEvents.length)showStep(orderedEvents.length-1);
@@ -964,46 +980,7 @@
       summary.textContent="Full pipeline view enabled";
       clearFlash();
     };
-    document.getElementById("devBtn").onclick=()=>{
-      devMode=!devMode;
-      document.getElementById("devBtn").textContent=`Dev: ${devMode?"On":"Off"}`;
-      document.getElementById("devPanel").style.display=devMode?"block":"none";
-      updateDevInfo();
-    };
-    document.getElementById("copyCoords").onclick=async()=>{
-      const payload = `// ${mode}\n` + JSON.stringify(MODELS[mode], null, 2);
-      try { await navigator.clipboard.writeText(payload); } catch {}
-      document.getElementById("devInfo").textContent=`Copied ${mode} coordinates to clipboard.`;
-    };
-    document.getElementById("saveCoords").onclick=()=>{
-      const payload = {
-        exported_at: new Date().toISOString(),
-        active_mode: mode,
-        flow1: MODELS.flow1,
-        flow2: MODELS.flow2
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `workflow-layout-${Date.now()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      document.getElementById("devInfo").textContent = "Saved layout JSON file (flow1 + flow2).";
-    };
-    window.addEventListener("keydown",(e)=>{
-      if(!devMode) return;
-      if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)){
-        e.preventDefault();
-        const step=e.shiftKey?40:10;
-        if(e.key==="ArrowLeft") moveSelected(-step,0);
-        if(e.key==="ArrowRight") moveSelected(step,0);
-        if(e.key==="ArrowUp") moveSelected(0,-step);
-        if(e.key==="ArrowDown") moveSelected(0,step);
-      }
-    });
+    
 
     normalizeModeLayout("flow1");
     normalizeModeLayout("flow2");
