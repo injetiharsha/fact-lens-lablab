@@ -58,7 +58,15 @@ def _memory_db_path() -> Path:
     raw = os.getenv("FACTLENS_MEMORY_DB", "").strip()
     if raw:
         return Path(raw)
-    return Path(__file__).resolve().parent.parent / "data" / "factlens_memory.sqlite3"
+    local_default = Path(__file__).resolve().parent.parent / "data" / "factlens_memory.sqlite3"
+    try:
+        local_default.parent.mkdir(parents=True, exist_ok=True)
+        with open(local_default.parent / ".write_probe", "w", encoding="utf-8") as fp:
+            fp.write("ok")
+        (local_default.parent / ".write_probe").unlink(missing_ok=True)
+        return local_default
+    except Exception:
+        return Path("/tmp") / "factlens_memory.sqlite3"
 
 app.add_middleware(
     CORSMiddleware,
@@ -78,6 +86,7 @@ async def health() -> dict:
 async def verify(
     text: str = Form(""),
     input_type: str = Form("text"),
+    pdf_pages: str = Form(""),
     cache_mode: str = Form(""),
     force_live_recheck: str = Form("0"),
     file: Optional[UploadFile] = File(None),
@@ -95,6 +104,7 @@ async def verify(
             text=text,
             file_path=file_path,
             input_type=input_type,
+            pdf_pages=pdf_pages,
             cache_mode=cache_mode or None,
             force_live_recheck=force,
         )
@@ -107,6 +117,7 @@ async def verify(
 async def verify_start(
     text: str = Form(""),
     input_type: str = Form("text"),
+    pdf_pages: str = Form(""),
     cache_mode: str = Form(""),
     force_live_recheck: str = Form("0"),
     file: Optional[UploadFile] = File(None),
@@ -131,6 +142,7 @@ async def verify_start(
                 text=text,
                 file_path=file_path,
                 input_type=input_type,
+                pdf_pages=pdf_pages,
                 run_id=run_id,
                 cache_mode=cache_mode or None,
                 force_live_recheck=force,

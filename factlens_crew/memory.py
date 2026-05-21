@@ -17,7 +17,16 @@ def _db_path() -> Path:
     raw = os.getenv("FACTLENS_MEMORY_DB", "").strip()
     if raw:
         return Path(raw)
-    return Path(__file__).resolve().parent.parent / "data" / "factlens_memory.sqlite3"
+    local_default = Path(__file__).resolve().parent.parent / "data" / "factlens_memory.sqlite3"
+    try:
+        local_default.parent.mkdir(parents=True, exist_ok=True)
+        with open(local_default.parent / ".write_probe", "w", encoding="utf-8") as fp:
+            fp.write("ok")
+        (local_default.parent / ".write_probe").unlink(missing_ok=True)
+        return local_default
+    except Exception:
+        # Serverless/runtime fallback (e.g., Vercel): use writable temp dir.
+        return Path("/tmp") / "factlens_memory.sqlite3"
 
 
 def _ensure_dir(path: Path) -> None:

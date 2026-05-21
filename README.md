@@ -95,7 +95,8 @@ When live evidence is unavailable, the system returns `needs_live_evidence` rath
 ## Notes for Deployment
 
 - Keep secrets in platform environment variables (do not commit `.env`).
-- On Vercel deploy UI, dev-only controls are hidden automatically.
+- On deploy/local, workflow UI includes `Open Backend Live`, `Open Stored Data`, and `Full Pipeline` toggle.
+- For serverless runtimes, memory DB automatically falls back to `/tmp/factlens_memory.sqlite3` if project `data/` is read-only.
 - For Cloud Run/Vertex usage, ensure service auth and Vertex env vars are set.
 
 ## Current Status
@@ -103,4 +104,3 @@ When live evidence is unavailable, the system returns `needs_live_evidence` rath
 - UI telemetry + storage pages integrated.
 - Memory/history persistence enabled.
 - Retrieval quality depends on provider health/config at runtime.
-
