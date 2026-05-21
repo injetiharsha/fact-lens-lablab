@@ -1,6 +1,6 @@
-# FactLens Crew — Submission Draft
+# FactLens Crew - Submission Draft
 
-Use this as your copy-paste source for the lablab submission form.
+Use this as copy-ready content for the hackathon submission form.
 
 ## 1) Basic Information
 
@@ -8,23 +8,20 @@ Use this as your copy-paste source for the lablab submission form.
 `FactLens Crew: Agentic Evidence Mesh for Transparent Fact Verification`
 
 ### Short Description
-FactLens Crew is a collaborative multi-agent fact-checking system that retrieves live evidence, challenges weak assumptions, applies deterministic source-quality scoring, and returns a transparent final verdict with confidence and cited sources.
+FactLens Crew is a collaborative multi-agent fact-checking system that retrieves live evidence, scores source quality with deterministic guardrails, and returns transparent verdicts with confidence and citations.
 
 ### Long Description
-FactLens Crew is built for hackathon-grade, production-minded verification workflows where one LLM alone is not enough. The system runs a stateful agent mesh: Intake, Domain Router, Web Retrieval, Primary Source Retrieval, Data Extraction, Tri-Consistency, Evidence Aggregation, Skeptic Review, Source Quality Scoring, Numeric Comparator, and Consensus Moderator.
+FactLens Crew is designed for high-trust verification workflows where a single LLM is not enough. The system runs a staged agent mesh: Intake, Domain Router, Retrieval Trio (Web, Primary Sources, Data Extractor), Tri Consistency, Evidence Aggregation, Skeptic Review, Source Quality Scoring, Numeric Comparator, and Consensus Moderator.
 
-The pipeline is designed to reduce black-box behavior. Every stage emits workflow events, and evidence passes through deterministic guardrails before contributing to verdicts. Scoring combines relevance, credibility tier, temporal recency, and domain diversity penalties. A skeptic pass and numeric comparator help catch contradictions, especially on statistical claims.
+Every stage emits events for observability, and evidence passes through scoring/quality gates before affecting verdicts. The UI exposes pipeline progress, node-level details, run timelines, and stored run history to keep decisions auditable and explainable.
 
-The UI shows the full workflow graph, per-stage progress, node details, and run history to make reasoning traceable for judges and users. The system also supports cache/memory patterns for repeated claims while preserving clear provenance between live and historical evidence.
+The project aligns with Collaborative Systems and Agentic Workflows by demonstrating specialized agents coordinating through structured handoffs, bounded retries, and transparent arbitration.
 
-This project targets the Collaborative Systems and Agentic Workflows tracks by demonstrating independent specialized nodes that coordinate, self-correct through bounded retry loops, and produce explainable outputs instead of opaque answers.
-
-### Technology & Category Tags
+### Technology and Category Tags
 - Collaborative Systems
 - Agentic Workflows
 - Intelligent Reasoning
 - Multimodal
-- CrewAI
 - FastAPI
 - Gemini
 - Featherless
@@ -32,44 +29,44 @@ This project targets the Collaborative Systems and Agentic Workflows tracks by d
 ## 2) Cover Image and Presentation
 
 ### Cover Image
-- Use a screenshot of `static/workflow.html` showing:
-  - full pipeline graph
-  - active node states
-  - verdict and confidence
+Use a screenshot of `workflow.html` showing:
+- full pipeline graph
+- active stage states
+- final verdict and confidence
 
 ### Video Presentation
-- 2-3 min recommended flow:
-1. Problem + why naive LLM fact-checking fails.
-2. Agent mesh overview (roles and handoffs).
-3. Live run with a claim.
-4. Show evidence scoring and final verdict.
-5. Explain cache/memory + retry logic.
+Suggested 2-3 minute flow:
+1. Problem and motivation
+2. Architecture and agent roles
+3. Live claim run
+4. Evidence scoring and final arbitration
+5. Observability and memory/history
 
 ### Slide Presentation
-- 5-8 slides:
-1. Problem statement
+Suggested 5-8 slides:
+1. Problem
 2. System architecture
 3. Agent responsibilities
-4. Scoring/guardrails
-5. Workflow UI + observability
+4. Scoring and guardrails
+5. UI and telemetry
 6. Results and limitations
-7. Future work
+7. Future improvements
 
-## 3) App Hosting & Code Repository
+## 3) App Hosting and Repository
 
 ### Public GitHub Repository
 `https://github.com/injetiharsha/fact-lens-lablab`
 
 ### Demo Application Platform
-- Vultr (recommended), or equivalent public host
+- Vercel / Cloud Run / Vultr (choose final hosted target)
 
 ### Application URL
-- Add deployed public URL here
+- Add final public URL
 
-## 4) Verification Checklist (Before Final Submit)
+## 4) Final Checklist
 
-1. `.env` excluded from repo; `.env.example` complete.
-2. App boot tested from clean environment.
-3. Smoke test run completed with logs captured.
-4. Demo video link and slides link added.
-5. Public URL accessible without local setup.
+1. `.env` is excluded from repo, `.env.example` is complete.
+2. App starts cleanly in a fresh environment.
+3. Smoke tests executed and verified.
+4. Cover image, video, and slides are ready.
+5. Public URL is accessible.
