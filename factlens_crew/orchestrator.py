@@ -26,7 +26,7 @@ from .tools import (
     classify_claim_domain,
     dedupe_sources,
     extract_claim_facts,
-    extract_file_text,
+    extract_file_payload,
     gather_api_evidence,
     gather_web_scrape_evidence,
     has_live_evidence_sources,
@@ -37,6 +37,7 @@ from .tools import (
     search_primary_sources,
     search_web_routed,
     temporal_weight,
+    _mmr_select,
 )
 
 try:
@@ -72,6 +73,7 @@ def run_factlens_crew(
     text: str = "",
     file_path: str = "",
     input_type: str = "text",
+    pdf_pages: str = "",
     run_id: str | None = None,
     cache_mode: str | None = None,
     force_live_recheck: bool = False,
@@ -85,7 +87,7 @@ def run_factlens_crew(
         force_live_recheck=force_live_recheck,
         cancel_check=cancel_check,
     )
-    return workflow.run(text=text, file_path=file_path, input_type=input_type)
+    return workflow.run(text=text, file_path=file_path, input_type=input_type, pdf_pages=pdf_pages)
 
 
 class AuditorContract(BaseModel):
@@ -113,9 +115,9 @@ class FactLensCrewWorkflow:
         if self.model_policy not in {"quality", "balanced", "fast"}:
             self.model_policy = "quality"
         self.memory = MemoryStore()
-        self.cache_mode = (cache_mode_override or os.getenv("CACHE_MODE", "off")).strip().lower()
+        self.cache_mode = (cache_mode_override or os.getenv("CACHE_MODE", "auto")).strip().lower()
         if self.cache_mode not in {"off", "read", "write", "read_write", "update", "auto"}:
-            self.cache_mode = "off"
+            self.cache_mode = "auto"
         self.cache_ttl_sec = int(os.getenv("CACHE_TTL_SECONDS", "86400"))
         self.session_id = os.getenv("FACTLENS_SESSION_ID", str(uuid.uuid4()))
         self.policy_version = os.getenv("FACTLENS_POLICY_VERSION", "v1")
@@ -127,9 +129,9 @@ class FactLensCrewWorkflow:
         self.cancel_check = cancel_check
         self._cancel_emitted = False
 
-    def run(self, text: str = "", file_path: str = "", input_type: str = "text") -> Dict[str, Any]:
+    def run(self, text: str = "", file_path: str = "", input_type: str = "text", pdf_pages: str = "") -> Dict[str, Any]:
         self._event("System", "started", "FactLens Crew run started", {"crewai_available": self.crewai_available})
-        raw_text = self._load_input_text(text=text, file_path=file_path, input_type=input_type)
+        raw_text = self._load_input_text(text=text, file_path=file_path, input_type=input_type, pdf_pages=pdf_pages)
         claim_hint = self._best_claim(raw_text)
         claim_norm = normalize_for_cache(claim_hint)
         self.memory.start_run(
@@ -211,25 +213,34 @@ class FactLensCrewWorkflow:
         self.state.raw_evidence_pool = gathered_sources
 
         if not live_sources(gathered_sources):
-            self._event(
-                "System",
-                "needs_live_evidence",
-                offline_fallback_message(),
-                {"live_providers_available": has_live_evidence_sources()},
+            # Backup pass with a broader query route before hard-failing.
+            backup_web = self._stage_timed(
+                "backup_web_retrieval",
+                lambda: self._web_scout_agent(claim, "general", max_results=8),
             )
-            agent_reports = [intake["report"], domain_route["report"], web_scout, archive_hunter, data_extractor, tri_consistency]
-            final = self._final_response(
-                verdict="needs_live_evidence",
-                confidence=0,
-                agent_reports=agent_reports,
-                sources=[],
-                disagreements=["No live cited evidence was available, so the crew did not fabricate a verdict."],
-                explanation="The crew requires real cited evidence before arbitration.",
-                recommendation=offline_fallback_message(),
-            )
-            self._event("System", "completed", "Run stopped until live evidence is available", final)
-            self.memory.finish_run(self.run_id, final)
-            return final
+            gathered_sources = dedupe_sources(gathered_sources + backup_web.sources)
+            self.state.raw_evidence_pool = gathered_sources
+            if not live_sources(gathered_sources):
+                self._event(
+                    "System",
+                    "needs_live_evidence",
+                    offline_fallback_message(),
+                    {"live_providers_available": has_live_evidence_sources()},
+                )
+                agent_reports = [intake["report"], domain_route["report"], web_scout, archive_hunter, data_extractor, tri_consistency, backup_web]
+                final = self._final_response(
+                    verdict="needs_live_evidence",
+                    confidence=0,
+                    agent_reports=agent_reports,
+                    sources=[],
+                    disagreements=["No live cited evidence was available, so the crew did not fabricate a verdict."],
+                    explanation="The crew requires real cited evidence before arbitration.",
+                    recommendation=offline_fallback_message(),
+                )
+                self._event("System", "completed", "Run stopped until live evidence is available", final)
+                self.memory.finish_run(self.run_id, final)
+                return final
+            self._event("System", "completed", "Backup live retrieval succeeded; continuing pipeline.", {"added_sources": len(backup_web.sources)})
 
         skeptic = self._stage_timed("skeptic", lambda: self._skeptic_agent(claim, gathered_sources))
         auditor = self._stage_timed("auditor", lambda: self._evidence_auditor_agent(claim, gathered_sources, skeptic))
@@ -278,8 +289,12 @@ class FactLensCrewWorkflow:
             reports = [intake["report"], domain_route["report"], web_scout, archive_hunter, data_extractor, rebuttal, tri_consistency, skeptic, auditor, stat_guard, moderator]
 
         verdict = self._extract_verdict(moderator.summary)
+        final_conf = int(moderator.confidence or 0)
+        # Guardrail: unresolved verdicts must not appear as high-confidence.
+        if verdict in {"insufficient_evidence", "needs_live_evidence"}:
+            final_conf = min(final_conf, 45 if verdict == "insufficient_evidence" else 0)
         self.state.final_verdict = verdict
-        self.state.confidence_score = float(moderator.confidence)
+        self.state.confidence_score = float(final_conf)
         self.state.the_turn = self._explainer_agent(claim, reports, moderator)
         self.change_log = self.memory.build_change_log(
             run_id=self.run_id,
@@ -290,12 +305,12 @@ class FactLensCrewWorkflow:
 
         final = self._final_response(
             verdict=verdict,
-            confidence=moderator.confidence,
+            confidence=final_conf,
             agent_reports=reports,
             sources=self.state.audited_evidence_pool[:8],
             disagreements=skeptic.findings,
             explanation=moderator.summary,
-            recommendation=self._recommendation(moderator.confidence, self.state.audited_evidence_pool),
+            recommendation=self._recommendation(final_conf, self.state.audited_evidence_pool),
         )
         self._event("System", "completed", "FactLens Crew run completed", final)
         self.memory.finish_run(self.run_id, final)
@@ -316,15 +331,36 @@ class FactLensCrewWorkflow:
                 self._cancel_emitted = True
             raise RunCancelledError(f"Run {self.run_id} cancelled")
 
-    def _load_input_text(self, text: str, file_path: str, input_type: str) -> str:
+    def _load_input_text(self, text: str, file_path: str, input_type: str, pdf_pages: str = "") -> str:
         parts = [normalize_text(text)]
         if file_path:
-            extracted = extract_file_text(file_path)
+            payload = extract_file_payload(file_path, pdf_pages=pdf_pages)
+            extracted = normalize_text(payload.get("text") or "")
+            meta = payload.get("meta") or {}
+            if input_type == "pdf":
+                sections = payload.get("sections") or []
+                if sections:
+                    # Feed section-aware snippets into intake to improve claim capture
+                    # for long multi-context documents.
+                    snippets = []
+                    for row in sections[:8]:
+                        page = row.get("page")
+                        txt = normalize_text(row.get("text") or "")
+                        if not txt:
+                            continue
+                        snippets.append(f"[page {page}] {txt}")
+                    if snippets:
+                        extracted = normalize_text(" ".join(snippets))[:12000]
             if extracted:
-                self._event("Intake", "file_extracted", f"Extracted text from {input_type} input", {"chars": len(extracted)})
+                self._event(
+                    "Intake",
+                    "file_extracted",
+                    f"Extracted text from {input_type} input",
+                    {"chars": len(extracted), **meta},
+                )
                 parts.append(extracted)
             else:
-                self._event("Intake", "file_warning", f"No text extracted from {input_type} input")
+                self._event("Intake", "file_warning", f"No text extracted from {input_type} input", meta)
         return normalize_text(" ".join(part for part in parts if part))
 
     def _intake_agent(self, raw_text: str) -> Dict[str, Any]:
@@ -409,13 +445,21 @@ class FactLensCrewWorkflow:
             self._event("Memory", "completed", "Using prior similar-claim hints for retrieval.", {"from_history": True, "hints": hints})
         sources = search_web_routed(query_claim, domain=domain, max_results=max_results)
         channels = sorted({source.channel for source in sources}) if sources else []
+        channel_mix: Dict[str, int] = {}
+        for source in sources:
+            channel_mix[source.channel] = channel_mix.get(source.channel, 0) + 1
         findings = [
             f"Collected {len(sources)} web results.",
             f"Channels used: {', '.join(channels) if channels else 'none'}.",
         ]
         report = AgentReport(agent="Web Scout Agent", summary="General web evidence gathered.", confidence=66 if sources else 30, findings=findings, sources=sources)
         self._trace("Web Scout Agent", "web_evidence_collected", "Gathered open-web evidence.", 0, "web_search")
-        self._event("Web Research Agent", "completed", "Broad evidence collected from web search.", {"sources": len(sources)})
+        self._event(
+            "Web Research Agent",
+            "completed",
+            "Broad evidence collected from web search.",
+            {"sources": len(sources), "channel_mix": channel_mix},
+        )
         return report
 
     def _archive_hunter_agent(self, claim: str, domain: str, max_results: int = 6) -> AgentReport:
@@ -776,6 +820,7 @@ class FactLensCrewWorkflow:
         explanation: str,
         recommendation: str,
     ) -> Dict[str, Any]:
+        stance = self._stance_pack(verdict, confidence)
         claim_norm = normalize_for_cache(self.state.metadata.normalized_claim)
         ckey = build_cache_key(claim_norm, self.policy_version) if claim_norm else ""
         return {
@@ -789,6 +834,9 @@ class FactLensCrewWorkflow:
             "disagreements": disagreements,
             "final_explanation": explanation,
             "recommendation": recommendation,
+            "stance_score": stance["stance_score"],
+            "stance_reliability": stance["stance_reliability"],
+            "confidence_band": stance["confidence_band"],
             "events": event_store.list(self.run_id),
             "stage_metrics": self.state.stage_metrics,
             "decision_trace": [row.to_dict() for row in self.state.trace_logs],
@@ -817,6 +865,29 @@ class FactLensCrewWorkflow:
                 "finished_at": int(time.time()),
             },
         }
+
+    @staticmethod
+    def _stance_pack(verdict: str, confidence: int) -> Dict[str, Any]:
+        c = max(0, min(100, int(confidence or 0)))
+        conf01 = c / 100.0
+        verdict_l = normalize_text(verdict).lower()
+        if verdict_l == "supported":
+            score = round(conf01, 3)
+            reliability = "highly_reliable_support" if conf01 >= 0.75 else "low_reliability_support"
+        elif verdict_l == "refuted":
+            score = round(-conf01, 3)
+            reliability = "highly_misleading" if conf01 >= 0.75 else "low_misleading"
+        else:
+            score = 0.0
+            reliability = "need_human_verification" if conf01 < 0.55 else "neutral"
+
+        if conf01 >= 0.75:
+            band = "high"
+        elif conf01 >= 0.55:
+            band = "medium"
+        else:
+            band = "low"
+        return {"stance_score": score, "stance_reliability": reliability, "confidence_band": band}
 
     def _resolve_cache_decision(self, claim_norm: str, auto_seed_similar: List[Dict[str, Any]]) -> str:
         if self.force_live_recheck:
@@ -970,7 +1041,7 @@ class FactLensCrewWorkflow:
             heavy = generate_featherless_json(
                 prompt,
                 model_env="FEATHERLESS_MODERATOR_HEAVY_MODEL",
-                default_model="openai/gpt-oss-120b",
+                default_model="meta-llama/Llama-3.3-70B-Instruct",
             )
             if heavy:
                 return heavy

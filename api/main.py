@@ -87,7 +87,7 @@ async def verify(
     text: str = Form(""),
     input_type: str = Form("text"),
     pdf_pages: str = Form(""),
-    cache_mode: str = Form(""),
+    cache_mode: str = Form("auto"),
     force_live_recheck: str = Form("0"),
     file: Optional[UploadFile] = File(None),
 ) -> dict:
@@ -105,7 +105,7 @@ async def verify(
             file_path=file_path,
             input_type=input_type,
             pdf_pages=pdf_pages,
-            cache_mode=cache_mode or None,
+            cache_mode=(cache_mode or "auto"),
             force_live_recheck=force,
         )
     finally:
@@ -118,7 +118,7 @@ async def verify_start(
     text: str = Form(""),
     input_type: str = Form("text"),
     pdf_pages: str = Form(""),
-    cache_mode: str = Form(""),
+    cache_mode: str = Form("auto"),
     force_live_recheck: str = Form("0"),
     file: Optional[UploadFile] = File(None),
 ) -> dict:
@@ -144,7 +144,7 @@ async def verify_start(
                 input_type=input_type,
                 pdf_pages=pdf_pages,
                 run_id=run_id,
-                cache_mode=cache_mode or None,
+                cache_mode=(cache_mode or "auto"),
                 force_live_recheck=force,
                 cancel_check=lambda: bool(_run_cancel_requested.get(run_id, False)),
             )
