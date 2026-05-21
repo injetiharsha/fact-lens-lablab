@@ -1,78 +1,44 @@
-> Audit Sync (2026-05-18 19:30:12 +05:30)
-> - Workflow mode: old orchestrator path only (no architecture migration)
-> - Latest smoke run: $run
-> - Claim: "India is the 4th largest economy in 2026"
-> - Result: insufficient_evidence (confidence 25%, sources 0)
-> - Current blocker: retrieval sparsity; scoring remains conservative by design.
-> Status Sync (2026-05-18 18:43:15 +05:30)
-> - Commit: `8972a91`
-> - Smoke test: `python -m factlens_crew.smoke_test_india_2026` = PASS (runner OK)
-> - Latest workflow outcome for claim "India is the 4th largest economy in 2026": `insufficient_evidence` (25% confidence)
 # FactLens Crew
 
-Collaborative multi-agent fact-checking demo for the lablab.ai AI Agent Olympics / Milan AI Week hackathon.
+FactLens Crew is a collaborative, agentic fact-checking system built for hackathon/demo workflows.
+It accepts text, image, or PDF input, retrieves live evidence, scores evidence quality, and returns a transparent verdict with traceable pipeline events.
 
-## System Status
+## What This Project Does
 
-**Current Maturity:** S2 (Evidence-Reliable) per PROJECT_OPTIMIZATION_PLAYBOOK
-**Latest Refinement:** Intake Agent (2026-05-18)
-- Deterministic checkability criteria
-- Explicit error handling and diagnostics
-- Opinion detection
-- Confidence calibration
+- Runs a multi-agent verification pipeline end-to-end.
+- Uses live retrieval channels (web/API/scrape) with source-aware filtering.
+- Applies deterministic scoring and quality guardrails before verdicting.
+- Stores run history, evidence, events, and similarity memory in SQLite.
+- Exposes workflow telemetry UI and backend/storage live pages.
 
-For detailed refinements, see [INTAKE_AGENT_REFINEMENT.md](INTAKE_AGENT_REFINEMENT.md)
+## Core Pipeline
 
-## Quick Start: Testing Intake Agent
+1. Intake Agent
+2. Domain Router Agent
+3. Retrieval Trio
+   - Web Research Agent
+   - Primary Source Agent
+   - Data Extractor Agent
+4. Tri Consistency Agent
+5. Evidence Aggregator Agent
+6. Skeptic Agent
+7. Source Quality Agent
+8. Stat Comparator Agent
+9. Consensus Moderator Agent
+10. Memory/Cache tail nodes (similar claims, run store, trust stats)
 
-```powershell
-# Unit tests (comprehensive test suite)
-python -m pytest tests/test_intake_agent.py -v
+## Repository Structure
 
-# Endpoint test (demonstrates all 5 test matrix claims + edge cases)
-python scripts/test_intake_endpoint.py
+- `api/main.py` - FastAPI app and endpoints
+- `factlens_crew/orchestrator.py` - main workflow orchestration
+- `factlens_crew/tools.py` - retrieval/extraction/scoring helpers
+- `factlens_crew/memory.py` - SQLite memory/cache integration
+- `static/workflow.html` - primary workflow UI
+- `static/backend-live.html` - live backend event monitor
+- `static/storage-live.html` - stored runs/evidence explorer
+- `.env.example` - runtime config template
 
-# Integration test (full workflow)
-python -m pytest tests/test_workflow.py -v
-```
-
-## What It Builds
-
-FactLens Crew accepts a text claim plus optional PDF/image input. A visible War Room of specialized agents extracts the claim, researches evidence, challenges assumptions, scores source quality, and produces a consensus verdict. It does not fabricate final verdicts when live evidence is unavailable.
-
-- Intake Agent: extracts a checkable claim from text, PDF, or image input. Uses Gemini when `GEMINI_API_KEY` is configured.
-- Domain Router Agent: classifies claim domain and semantic route.
-- Web Research Agent: gathers broad web evidence.
-- Primary Source Agent: prioritizes official, academic, government, and reference sources.
-- Data Extractor Agent: runs structured API + deep scrape extraction.
-- Skeptic Agent: challenges weak evidence and missing citations. Uses Featherless when `FEATHERLESS_API_KEY` is configured.
-- Source Quality Agent: applies deterministic scoring guardrails and admission filters.
-- Consensus Moderator Agent: resolves disagreement and returns the final verdict. Uses Gemini when `GEMINI_API_KEY` is configured.
-- Explainer Node ("The Turn"): reports why/when consensus changed.
-
-## Hackathon Partner Alignment
-
-- CrewAI: orchestration framework.
-- Gemini: intended reasoning and multimodal provider.
-- Featherless: intended open-source Skeptic Agent provider.
-- Vultr: deployment target.
-- Speechmatics: optional stretch goal for voice/audio input.
-
-The implementation tries free DuckDuckGo search first and can optionally use Gemini for evidence suggestions. It refuses to produce a factual verdict without live cited evidence. For local UI demos only, set `FACTLENS_ALLOW_OFFLINE_FALLBACK=1`.
-
-## Real Evidence Mode
-
-For judging or production-like runs:
-
-- Keep `FACTLENS_ALLOW_OFFLINE_FALLBACK=0`.
-- Install dependencies from `requirements.txt` so DuckDuckGo search and PDF/image extraction work.
-- Set `GEMINI_API_KEY` for real Intake and Moderator LLM reasoning.
-- Set `FEATHERLESS_API_KEY` for the cross-model Skeptic Agent.
-- Optional: set `TAVILY_API_KEY` only if DuckDuckGo is blocked or unreliable.
-
-If all live evidence providers fail, the API returns `needs_live_evidence` with confidence `0` instead of inventing sources.
-
-## Local Setup
+## Quick Start
 
 ```powershell
 python -m venv .venv
@@ -84,59 +50,57 @@ Copy-Item .env.example .env
 
 Open:
 
-```text
-http://127.0.0.1:8000
-```
+- `http://127.0.0.1:8000/workflow.html`
+- `http://127.0.0.1:8000/backend-live.html`
+- `http://127.0.0.1:8000/storage-live.html`
 
-## API
+## API Endpoints
 
-```text
-POST /api/verify
-GET /api/runs/{run_id}/events
-GET /health
-```
+- `POST /api/verify` - synchronous run
+- `POST /api/verify/start` - async run start
+- `GET /api/runs/{run_id}/status` - run status/result
+- `GET /api/runs/{run_id}/events` - run event stream
+- `GET /api/storage/runs` - stored runs list
+- `GET /api/storage/run/{run_id}` - stored run detail
+- `GET /health` - health check
 
-`POST /api/verify` now includes additive mesh fields:
-- `stage_metrics`
-- `decision_trace`
-- `the_turn`
-- `evidence_rejections`
+## Environment Configuration
 
-`POST /api/verify` accepts multipart form fields:
+Copy from `.env.example`.
+Important keys:
 
-- `text`: claim or context
-- `input_type`: `text`, `pdf`, `image`, or detected file type
-- `file`: optional PDF/image upload
+- LLM/providers: `GEMINI_API_KEY`, `FEATHERLESS_API_KEY`
+- Search: `GOOGLE_SEARCH_API_KEY`, `GOOGLE_SEARCH_CX`, `TAVILY_API_KEY`
+- Vertex search: `VERTEX_SEARCH_ENABLE`, `VERTEX_PROJECT_ID`, `VERTEX_LOCATION`, `VERTEX_MODEL`
+- Guardrails: `FACTLENS_MIN_EVIDENCE_COUNT`, `FACTLENS_MIN_TRUSTED_SOURCES`, `FACTLENS_MIN_DOMAIN_DIVERSITY`
+- Cache/memory: `CACHE_MODE`, `CACHE_TTL_SECONDS`, `FACTLENS_MEMORY_DB`
 
-## Demo Script
+## Scoring and Verdicting
 
-1. Paste a claim or upload a PDF/image.
-2. Click `Run Crew`.
-3. Show the War Room agent cards filling with findings.
-4. Explain how the Skeptic Agent and Source Quality Agent prevent black-box answers.
-5. Show final verdict, confidence, source list, disagreement summary, and recommendation.
+Source quality uses weighted scoring across:
 
-## Search Strategy
+- relevance
+- credibility
+- temporal signals
+- domain diversity penalties
 
-The agents do not rely on Tavily. Evidence lookup order is:
+The moderator returns:
 
-1. DuckDuckGo search through `ddgs`.
-2. Optional Gemini evidence helper when `GEMINI_API_KEY` is set.
-3. Optional Tavily fallback when `TAVILY_API_KEY` is set.
-4. Explicit offline fallback only when `FACTLENS_ALLOW_OFFLINE_FALLBACK=1`.
+- verdict (`supported`, `refuted`, `insufficient_evidence`, `needs_live_evidence`)
+- confidence
+- reasoning trace/events
 
-For real hackathon judging, keep offline fallback disabled. If no live source returns evidence, the system returns `needs_live_evidence` instead of fabricating a verdict.
+When live evidence is unavailable, the system returns `needs_live_evidence` rather than fabricating output.
 
-## Mesh Runtime Config
+## Notes for Deployment
 
-Use these env knobs to control quality/speed and guardrails:
+- Keep secrets in platform environment variables (do not commit `.env`).
+- On Vercel deploy UI, dev-only controls are hidden automatically.
+- For Cloud Run/Vertex usage, ensure service auth and Vertex env vars are set.
 
-- `MODEL_POLICY=quality|balanced|fast`
-- `FACTLENS_MIN_EVIDENCE_COUNT`
-- `FACTLENS_MIN_TRUSTED_SOURCES`
-- `FACTLENS_MIN_DOMAIN_DIVERSITY`
-- `FACTLENS_STAGE_TIMEOUT_SEC`
-- `FACTLENS_VERIFIER_TRIGGER_CONFIDENCE_GATE`
-- `FACTLENS_DOMAIN_BLACKLIST`
+## Current Status
 
+- UI telemetry + storage pages integrated.
+- Memory/history persistence enabled.
+- Retrieval quality depends on provider health/config at runtime.
 
