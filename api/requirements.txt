@@ -1,6 +1,10 @@
 fastapi==0.115.6
 python-multipart==0.0.20
+langchain==1.3.9
+langgraph==1.2.5
 langchain-core>=1.4.0,<2.0.0
+langchain-openai
+langchain-google-genai
 ddgs==9.9.1
 google-generativeai==0.8.3
 PyMuPDF==1.25.1

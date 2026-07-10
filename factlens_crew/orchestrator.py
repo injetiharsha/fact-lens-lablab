@@ -8,9 +8,10 @@ import re
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, TypedDict
 from pydantic import BaseModel, ValidationError
 from langchain_core.runnables import RunnableLambda, RunnableParallel
+from langgraph.graph import END, START, StateGraph
 
 from .events import event_store
 from .llm import compact_sources_for_prompt, generate_featherless_json, generate_gemini_json
@@ -95,6 +96,37 @@ class RunCancelledError(Exception):
     """Raised when a run is cancelled by user request."""
 
 
+class FactLensGraphState(TypedDict, total=False):
+    text: str
+    file_path: str
+    input_type: str
+    pdf_pages: str
+    raw_text: str
+    claim_hint: str
+    claim_norm: str
+    claim: str
+    checkable: bool
+    domain: str
+    claim_type: str
+    intake_report: AgentReport
+    domain_route: AgentReport
+    web_report: AgentReport
+    archive_report: AgentReport
+    extractor_report: AgentReport
+    tri_consistency_report: AgentReport
+    gathered_sources: List[EvidenceItem]
+    skeptic_report: AgentReport
+    auditor_report: AgentReport
+    stat_guard_report: AgentReport
+    moderator_report: AgentReport
+    rebuttal_report: AgentReport
+    terminal_result: Dict[str, Any]
+    status: str
+    cache_decision: str
+    similar_claims_seed: List[Dict[str, Any]]
+    stage_error: str
+
+
 class FactLensCrewWorkflow:
     def __init__(
         self,
@@ -123,9 +155,10 @@ class FactLensCrewWorkflow:
         self.cache_decision = self.cache_mode
         self.cancel_check = cancel_check
         self._cancel_emitted = False
+        self._graph = None
 
     def run(self, text: str = "", file_path: str = "", input_type: str = "text", pdf_pages: str = "") -> Dict[str, Any]:
-        self._event("System", "started", "FactLens Crew run started", {"langchain_available": self.langchain_available})
+        return self._run_langgraph(text=text, file_path=file_path, input_type=input_type, pdf_pages=pdf_pages)
         raw_text = self._load_input_text(text=text, file_path=file_path, input_type=input_type, pdf_pages=pdf_pages)
         claim_hint = self._best_claim(raw_text)
         claim_norm = normalize_for_cache(claim_hint)
@@ -879,6 +912,375 @@ class FactLensCrewWorkflow:
                 "finished_at": int(time.time()),
             },
         }
+
+    def _build_langgraph(self):
+        builder: StateGraph[FactLensGraphState] = StateGraph(FactLensGraphState)
+
+        def bootstrap(state: FactLensGraphState) -> Dict[str, Any]:
+            self._event("System", "started", "FactLens Crew run started", {"langchain_available": self.langchain_available})
+            raw_text = self._load_input_text(
+                text=state.get("text", ""),
+                file_path=state.get("file_path", ""),
+                input_type=state.get("input_type", "text"),
+                pdf_pages=state.get("pdf_pages", ""),
+            )
+            claim_hint = self._best_claim(raw_text)
+            claim_norm = normalize_for_cache(claim_hint)
+            self.memory.start_run(
+                self.run_id,
+                claim_raw=raw_text[:2000],
+                claim_normalized=claim_norm,
+                input_type=state.get("input_type", "text"),
+                session_id=self.session_id,
+                policy_version=self.policy_version,
+            )
+
+            auto_seed_similar = self.memory.find_similar_claims(claim_norm, claim_raw=claim_hint, limit=1) if claim_norm else []
+            self.cache_decision = self._resolve_cache_decision(claim_norm, auto_seed_similar)
+            if self.cache_decision in {"read", "read_write"} and claim_norm and not self.force_live_recheck:
+                cached = self.memory.cache_get(claim_norm, policy_version=self.policy_version, ttl_sec=self.cache_ttl_sec)
+                if cached:
+                    self.cache_hit = True
+                    cached["run_id"] = self.run_id
+                    cached["cache"] = {
+                        "mode": self.cache_mode,
+                        "decision": self.cache_decision,
+                        "hit": True,
+                        "force_live_recheck": False,
+                        "claim_key": build_cache_key(claim_norm, self.policy_version),
+                        "policy_version": self.policy_version,
+                        "ttl_seconds": self.cache_ttl_sec,
+                    }
+                    cached["input_claim_raw"] = claim_hint
+                    cached["input_claim_normalized"] = claim_norm
+                    self._event("System", "completed", "Cache hit served existing verdict", {"claim_key": claim_norm})
+                    cached["events"] = event_store.list(self.run_id)
+                    self.memory.finish_run(self.run_id, cached)
+                    return {"terminal_result": cached, "status": "cache_hit"}
+
+            return {
+                "raw_text": raw_text,
+                "claim_hint": claim_hint,
+                "claim_norm": claim_norm,
+                "cache_decision": self.cache_decision,
+                "similar_claims_seed": auto_seed_similar,
+                "status": "continue",
+            }
+
+        def route_after_bootstrap(state: FactLensGraphState) -> str:
+            return state.get("status", "continue")
+
+        def intake(state: FactLensGraphState) -> Dict[str, Any]:
+            raw_text = state.get("raw_text", "")
+            intake_report = self._stage_timed("intake", lambda: self._intake_agent(raw_text))
+            claim = intake_report["claim"]
+            claim_norm = normalize_for_cache(claim)
+            self.similar_claims = self.memory.find_similar_claims(claim_norm, claim_raw=claim, limit=3) if claim_norm else []
+            if self.similar_claims:
+                self._event("Memory", "completed", "Found similar historical claims for retrieval bootstrap.", {"similar": self.similar_claims})
+            claim_mode = self._claim_mode_agent(claim)
+            self.state.metadata = ClaimMetadata(
+                normalized_claim=claim,
+                is_checkable=bool(intake_report["checkable"]),
+                domain_category="general",
+                target_entities=self._extract_entities(claim),
+                claim_type=claim_mode,
+            )
+            if not intake_report["checkable"]:
+                final = self._final_response(
+                    verdict="insufficient_evidence",
+                    confidence=25,
+                    agent_reports=[intake_report["report"]],
+                    sources=[],
+                    disagreements=["Input did not contain a clearly checkable factual claim."],
+                    explanation="The Intake Agent could not isolate a verifiable factual claim.",
+                    recommendation="Submit a specific factual claim with enough context to verify.",
+                )
+                self._event("System", "completed", "Run completed with insufficient input", final)
+                self.memory.finish_run(self.run_id, final)
+                return {"terminal_result": final, "status": "done"}
+            self.state.metadata = ClaimMetadata(
+                normalized_claim=claim,
+                is_checkable=True,
+                domain_category="general",
+                target_entities=self._extract_entities(claim),
+                claim_type=claim_mode,
+            )
+            return {
+                "claim": claim,
+                "intake_report": intake_report["report"],
+                "claim_type": claim_mode,
+                "status": "continue",
+            }
+
+        def route_after_intake(state: FactLensGraphState) -> str:
+            return state.get("status", "continue")
+
+        def domain_route(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            routed = self._stage_timed("domain_router", lambda: self._domain_router_agent(claim))
+            self.state.metadata.domain_category = routed["domain"]
+            return {
+                "domain": routed["domain"],
+                "domain_route": routed["report"],
+                "status": "continue",
+            }
+
+        def tri_search(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            domain = state.get("domain", "general")
+            tri_reports = self._stage_timed("tri_search", lambda: self._tri_search_cluster(claim, domain))
+            return {
+                "web_report": tri_reports["web"],
+                "archive_report": tri_reports["archive"],
+                "extractor_report": tri_reports["extractor"],
+                "status": "continue",
+            }
+
+        def tri_consistency(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            tri_report = self._stage_timed(
+                "tri_consistency",
+                lambda: self._tri_consistency_agent(
+                    claim,
+                    state["web_report"],
+                    state["archive_report"],
+                    state["extractor_report"],
+                ),
+            )
+            return {"tri_consistency_report": tri_report, "status": "continue"}
+
+        def aggregate(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            gathered_sources = self._stage_timed(
+                "evidence_aggregation",
+                lambda: self._aggregate_evidence_agent(
+                    claim,
+                    state["web_report"],
+                    state["archive_report"],
+                    state["extractor_report"],
+                    state["tri_consistency_report"],
+                ),
+            )
+            self.state.raw_evidence_pool = gathered_sources
+            backup_web = None
+            if not live_sources(gathered_sources):
+                backup_web = self._stage_timed(
+                    "backup_web_retrieval",
+                    lambda: self._web_scout_agent(claim, "general", max_results=8),
+                )
+                gathered_sources = dedupe_sources(gathered_sources + backup_web.sources)
+                self.state.raw_evidence_pool = gathered_sources
+                if not live_sources(gathered_sources):
+                    self._event(
+                        "System",
+                        "needs_live_evidence",
+                        offline_fallback_message(),
+                        {"live_providers_available": has_live_evidence_sources()},
+                    )
+                    final = self._final_response(
+                        verdict="needs_live_evidence",
+                        confidence=0,
+                        agent_reports=[
+                            state["intake_report"],
+                            state["domain_route"],
+                            state["web_report"],
+                            state["archive_report"],
+                            state["extractor_report"],
+                            state["tri_consistency_report"],
+                            backup_web,
+                        ],
+                        sources=[],
+                        disagreements=["No live cited evidence was available, so the crew did not fabricate a verdict."],
+                        explanation="The crew requires real cited evidence before arbitration.",
+                        recommendation=offline_fallback_message(),
+                    )
+                    self._event("System", "completed", "Run stopped until live evidence is available", final)
+                    self.memory.finish_run(self.run_id, final)
+                    return {"terminal_result": final, "status": "needs_live"}
+                self._event("System", "completed", "Backup live retrieval succeeded; continuing pipeline.", {"added_sources": len(backup_web.sources) if backup_web else 0})
+            return {"gathered_sources": gathered_sources, "status": "continue"}
+
+        def route_after_aggregate(state: FactLensGraphState) -> str:
+            return state.get("status", "continue")
+
+        def skeptic(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            report = self._stage_timed("skeptic", lambda: self._skeptic_agent(claim, state["gathered_sources"]))
+            return {"skeptic_report": report, "status": "continue"}
+
+        def auditor(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            report = self._stage_timed(
+                "auditor",
+                lambda: self._evidence_auditor_agent(claim, state["gathered_sources"], state["skeptic_report"]),
+            )
+            self.state.audited_evidence_pool = report.sources
+            return {"auditor_report": report, "status": "continue"}
+
+        def stat_comparator(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            report = self._stage_timed("stat_comparator", lambda: self._stat_comparator_agent(claim, state["auditor_report"].sources))
+            return {"stat_guard_report": report, "status": "continue"}
+
+        def moderator(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            reports = [
+                state["domain_route"],
+                state["web_report"],
+                state["archive_report"],
+                state["extractor_report"],
+                state["tri_consistency_report"],
+                state["skeptic_report"],
+                state["auditor_report"],
+            ]
+            moderator_report = self._stage_timed("moderator", lambda: self._moderator_agent(claim, reports, state["stat_guard_report"]))
+            needs_rebuttal = self._needs_rebuttal(skeptic=state["skeptic_report"], moderator=moderator_report)
+            return {
+                "moderator_report": moderator_report,
+                "status": "needs_rebuttal" if needs_rebuttal else "continue",
+            }
+
+        def route_after_moderator(state: FactLensGraphState) -> str:
+            return state.get("status", "continue")
+
+        def rebuttal(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            domain = state.get("domain", "general")
+            self.state.retry_count += 1
+            self._event("Moderator", "retry", "One rebuttal loop triggered", {"reason": state["moderator_report"].summary})
+            rebuttal_report = self._stage_timed(
+                "rebuttal_search",
+                lambda: self._web_scout_agent(
+                    f"{claim} official source dispute {(state['skeptic_report'].findings[0] if state['skeptic_report'].findings else '')}",
+                    domain,
+                    max_results=6,
+                ),
+            )
+            merged = dedupe_sources(state["gathered_sources"] + rebuttal_report.sources)
+            tri_consistency_report = self._stage_timed(
+                "tri_consistency_recheck",
+                lambda: self._tri_consistency_agent(claim, rebuttal_report, state["archive_report"], state["extractor_report"]),
+            )
+            skeptic_report = self._stage_timed("skeptic_recheck", lambda: self._skeptic_agent(claim, merged))
+            auditor_report = self._stage_timed("auditor_recheck", lambda: self._evidence_auditor_agent(claim, merged, skeptic_report))
+            self.state.audited_evidence_pool = auditor_report.sources
+            stat_guard_report = self._stage_timed(
+                "stat_comparator_recheck",
+                lambda: self._stat_comparator_agent(claim, self.state.audited_evidence_pool),
+            )
+            moderator_report = self._stage_timed(
+                "moderator_recheck",
+                lambda: self._moderator_agent(
+                    claim,
+                    [
+                        state["domain_route"],
+                        state["web_report"],
+                        state["archive_report"],
+                        state["extractor_report"],
+                        rebuttal_report,
+                        tri_consistency_report,
+                        skeptic_report,
+                        auditor_report,
+                    ],
+                    stat_guard_report,
+                ),
+            )
+            return {
+                "rebuttal_report": rebuttal_report,
+                "gathered_sources": merged,
+                "tri_consistency_report": tri_consistency_report,
+                "skeptic_report": skeptic_report,
+                "auditor_report": auditor_report,
+                "stat_guard_report": stat_guard_report,
+                "moderator_report": moderator_report,
+                "status": "continue",
+            }
+
+        def finalize(state: FactLensGraphState) -> Dict[str, Any]:
+            claim = state.get("claim", "")
+            moderator_report = state["moderator_report"]
+            reports = [
+                state["intake_report"],
+                state["domain_route"],
+                state["web_report"],
+                state["archive_report"],
+                state["extractor_report"],
+                state["tri_consistency_report"],
+                state["skeptic_report"],
+                state["auditor_report"],
+                state["stat_guard_report"],
+                moderator_report,
+            ]
+            verdict = self._extract_verdict(moderator_report.summary)
+            final_conf = int(moderator_report.confidence or 0)
+            if verdict in {"insufficient_evidence", "needs_live_evidence"}:
+                final_conf = min(final_conf, 45 if verdict == "insufficient_evidence" else 0)
+            self.state.final_verdict = verdict
+            self.state.confidence_score = float(final_conf)
+            self.state.the_turn = self._explainer_agent(claim, reports, moderator_report)
+            self.change_log = self.memory.build_change_log(
+                run_id=self.run_id,
+                verdict=verdict,
+                similar_claims=self.similar_claims,
+                sources=[s.to_dict() for s in self.state.audited_evidence_pool[:12]],
+            )
+            final = self._final_response(
+                verdict=verdict,
+                confidence=final_conf,
+                agent_reports=reports,
+                sources=self.state.audited_evidence_pool[:8],
+                disagreements=state["skeptic_report"].findings,
+                explanation=moderator_report.summary,
+                recommendation=self._recommendation(final_conf, self.state.audited_evidence_pool),
+            )
+            self._event("System", "completed", "FactLens Crew run completed", final)
+            self.memory.finish_run(self.run_id, final)
+            return {"terminal_result": final, "status": "done"}
+
+        builder.add_node("bootstrap", bootstrap)
+        builder.add_node("intake", intake)
+        builder.add_node("domain_route", domain_route)
+        builder.add_node("tri_search", tri_search)
+        builder.add_node("tri_consistency", tri_consistency)
+        builder.add_node("aggregate", aggregate)
+        builder.add_node("skeptic", skeptic)
+        builder.add_node("auditor", auditor)
+        builder.add_node("stat_comparator", stat_comparator)
+        builder.add_node("moderator", moderator)
+        builder.add_node("rebuttal", rebuttal)
+        builder.add_node("finalize", finalize)
+
+        builder.add_edge(START, "bootstrap")
+        builder.add_conditional_edges("bootstrap", route_after_bootstrap, {"continue": "intake", "cache_hit": END, "done": END, "needs_live": END})
+        builder.add_conditional_edges("intake", route_after_intake, {"continue": "domain_route", "done": END})
+        builder.add_edge("domain_route", "tri_search")
+        builder.add_edge("tri_search", "tri_consistency")
+        builder.add_edge("tri_consistency", "aggregate")
+        builder.add_conditional_edges("aggregate", route_after_aggregate, {"continue": "skeptic", "needs_live": END, "done": END})
+        builder.add_edge("skeptic", "auditor")
+        builder.add_edge("auditor", "stat_comparator")
+        builder.add_edge("stat_comparator", "moderator")
+        builder.add_conditional_edges("moderator", route_after_moderator, {"needs_rebuttal": "rebuttal", "continue": "finalize"})
+        builder.add_edge("rebuttal", "finalize")
+        builder.add_edge("finalize", END)
+        return builder.compile()
+
+    def _run_langgraph(self, text: str = "", file_path: str = "", input_type: str = "text", pdf_pages: str = "") -> Dict[str, Any]:
+        if self._graph is None:
+            self._graph = self._build_langgraph()
+        result = self._graph.invoke(
+            {
+                "text": text,
+                "file_path": file_path,
+                "input_type": input_type,
+                "pdf_pages": pdf_pages,
+            }
+        )
+        terminal = result.get("terminal_result")
+        if isinstance(terminal, dict):
+            return terminal
+        raise RuntimeError("LangGraph workflow completed without a terminal result")
 
     @staticmethod
     def _stance_pack(verdict: str, confidence: int) -> Dict[str, Any]:

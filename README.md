@@ -1,6 +1,6 @@
 # FactLens Crew
 
-FactLens Crew is a collaborative, agentic fact-verification system built on LangChain prompt and runnable primitives.
+FactLens Crew is a collaborative, agentic fact-verification system built on LangChain and LangGraph.
 It accepts text/image/PDF input, retrieves live evidence through multiple channels, scores evidence quality with deterministic rules, and returns a transparent verdict with confidence, citations, and run telemetry.
 
 ## 1. End-to-End Flow
@@ -33,7 +33,7 @@ It accepts text/image/PDF input, retrieves live evidence through multiple channe
 ## 2. Architecture (Key Components)
 
 - `api/main.py`: FastAPI API, async run lifecycle, static hosting.
-- `factlens_crew/orchestrator.py`: main workflow and stage orchestration.
+- `factlens_crew/orchestrator.py`: LangGraph workflow and stage orchestration.
 - `factlens_crew/tools.py`: retrieval, extraction, scoring utilities.
 - `factlens_crew/memory.py`: SQLite-backed cache/history/similarity/trust storage.
 - `static/workflow.html`: primary workflow UI.

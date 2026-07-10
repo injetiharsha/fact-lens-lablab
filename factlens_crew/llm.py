@@ -14,8 +14,18 @@ import re
 import urllib.request
 from typing import Any, Dict, List
 
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda
+
+try:  # LangChain provider integrations
+    from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore
+except Exception:  # pragma: no cover
+    ChatGoogleGenerativeAI = None  # type: ignore
+
+try:  # LangChain provider integrations
+    from langchain_openai import ChatOpenAI  # type: ignore
+except Exception:  # pragma: no cover
+    ChatOpenAI = None  # type: ignore
 
 
 def _prompt_value_to_text(value: Any) -> str:
@@ -37,13 +47,56 @@ def _prompt_value_to_text(value: Any) -> str:
 
 
 def _render_langchain_prompt(prompt: str, system_message: str) -> str:
-    chain = ChatPromptTemplate.from_messages(
+    template = ChatPromptTemplate.from_messages(
         [
             ("system", system_message),
             ("human", "{prompt}"),
         ]
-    ) | RunnableLambda(_prompt_value_to_text)
-    return chain.invoke({"prompt": prompt})
+    )
+    return _prompt_value_to_text(template.invoke({"prompt": prompt}))
+
+
+def _invoke_langchain_json(model: Any, prompt: str, system_message: str, timeout_s: int = 20) -> Dict[str, Any]:
+    template = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_message),
+            ("human", "{prompt}"),
+        ]
+    )
+    chain = template | model | StrOutputParser()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(chain.invoke, {"prompt": prompt})
+        text = future.result(timeout=max(3, timeout_s))
+    return _extract_json(str(text or ""))
+
+
+def _build_gemini_model(model_env: str, default_model: str, api_key: str) -> Any:
+    model_name = os.getenv(model_env, default_model)
+    if ChatGoogleGenerativeAI is None:
+        return None
+    return ChatGoogleGenerativeAI(
+        model=model_name,
+        google_api_key=api_key,
+        temperature=0.2,
+        max_output_tokens=2048,
+    )
+
+
+def _build_featherless_model(model_env: str = "FEATHERLESS_MODEL", default_model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct", api_key: str = "") -> Any:
+    if ChatOpenAI is None:
+        return None
+    model_name = os.getenv(model_env, default_model)
+    base_url = os.getenv("FEATHERLESS_API_BASE", "https://api.featherless.ai/v1").strip()
+    if base_url.endswith("/chat/completions"):
+        base_url = base_url[: -len("/chat/completions")]
+    return ChatOpenAI(
+        model=model_name,
+        api_key=api_key,
+        base_url=base_url,
+        temperature=0.2,
+        timeout=30,
+    )
 
 
 def generate_gemini_json(prompt: str, model_env: str, default_model: str) -> Dict[str, Any]:
@@ -52,6 +105,15 @@ def generate_gemini_json(prompt: str, model_env: str, default_model: str) -> Dic
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         return {}
+    timeout_s = int(os.getenv("GEMINI_CALL_TIMEOUT_SECONDS", "20"))
+    rendered_prompt = _render_langchain_prompt(prompt, "Return only valid JSON. No markdown.")
+
+    model = _build_gemini_model(model_env, default_model, api_key)
+    if model is not None:
+        try:
+            return _invoke_langchain_json(model, rendered_prompt, "Return only valid JSON. No markdown.", timeout_s=timeout_s)
+        except Exception:
+            pass
 
     try:
         import google.generativeai as genai  # type: ignore
@@ -60,11 +122,9 @@ def generate_gemini_json(prompt: str, model_env: str, default_model: str) -> Dic
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(os.getenv(model_env, default_model))
-        timeout_s = int(os.getenv("GEMINI_CALL_TIMEOUT_SECONDS", "20"))
-        rendered_prompt = _render_langchain_prompt(prompt, "Return only valid JSON. No markdown.")
+        legacy = genai.GenerativeModel(os.getenv(model_env, default_model))
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(model.generate_content, rendered_prompt)
+            future = pool.submit(legacy.generate_content, rendered_prompt)
             response = future.result(timeout=max(3, timeout_s))
         return _extract_json(getattr(response, "text", "") or "")
     except Exception:
@@ -82,12 +142,21 @@ def generate_featherless_json(
     if not api_key:
         return {}
 
-    base_url = os.getenv("FEATHERLESS_API_BASE", "https://api.featherless.ai/v1/chat/completions").strip()
-    model = os.getenv(model_env, default_model).strip()
     rendered_prompt = _render_langchain_prompt(prompt, "Return only valid JSON. No markdown.")
+
+    model = _build_featherless_model(model_env=model_env, default_model=default_model, api_key=api_key)
+    if model is not None:
+        timeout_s = int(os.getenv("FEATHERLESS_CALL_TIMEOUT_SECONDS", "30"))
+        try:
+            return _invoke_langchain_json(model, rendered_prompt, "Return only valid JSON. No markdown.", timeout_s=timeout_s)
+        except Exception:
+            pass
+
+    base_url = os.getenv("FEATHERLESS_API_BASE", "https://api.featherless.ai/v1/chat/completions").strip()
+    model_name = os.getenv(model_env, default_model).strip()
     payload = json.dumps(
         {
-            "model": model,
+            "model": model_name,
             "messages": [
                 {
                     "role": "system",
