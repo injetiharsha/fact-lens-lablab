@@ -1,6 +1,6 @@
 # FactLens Crew
 
-FactLens Crew is a collaborative, agentic fact-verification system.
+FactLens Crew is a collaborative, agentic fact-verification system built on LangChain prompt and runnable primitives.
 It accepts text/image/PDF input, retrieves live evidence through multiple channels, scores evidence quality with deterministic rules, and returns a transparent verdict with confidence, citations, and run telemetry.
 
 ## 1. End-to-End Flow

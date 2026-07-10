@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 from pydantic import BaseModel, ValidationError
+from langchain_core.runnables import RunnableLambda, RunnableParallel
 
 from .events import event_store
 from .llm import compact_sources_for_prompt, generate_featherless_json, generate_gemini_json
@@ -39,12 +40,6 @@ from .tools import (
     temporal_weight,
     _mmr_select,
 )
-
-try:
-    import crewai as _crewai  # type: ignore
-except Exception:
-    _crewai = None
-
 
 _ENV_LOADED = False
 
@@ -109,7 +104,7 @@ class FactLensCrewWorkflow:
         cancel_check: Callable[[], bool] | None = None,
     ) -> None:
         self.run_id = run_id
-        self.crewai_available = _crewai is not None
+        self.langchain_available = True
         self.state = VerificationState()
         self.model_policy = os.getenv("MODEL_POLICY", "quality").strip().lower()
         if self.model_policy not in {"quality", "balanced", "fast"}:
@@ -130,7 +125,7 @@ class FactLensCrewWorkflow:
         self._cancel_emitted = False
 
     def run(self, text: str = "", file_path: str = "", input_type: str = "text", pdf_pages: str = "") -> Dict[str, Any]:
-        self._event("System", "started", "FactLens Crew run started", {"crewai_available": self.crewai_available})
+        self._event("System", "started", "FactLens Crew run started", {"langchain_available": self.langchain_available})
         raw_text = self._load_input_text(text=text, file_path=file_path, input_type=input_type, pdf_pages=pdf_pages)
         claim_hint = self._best_claim(raw_text)
         claim_norm = normalize_for_cache(claim_hint)
@@ -413,29 +408,48 @@ class FactLensCrewWorkflow:
             plan = {"web": 6, "archive": 5, "extractor": 5}
         else:
             plan = {"web": 8, "archive": 7, "extractor": 7}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {}
-            if claim_type == "breaking_news":
-                futures["web"] = pool.submit(self._web_scout_agent, claim, domain, plan["web"] + 2)
-                futures["archive"] = pool.submit(self._archive_hunter_agent, claim, domain, plan["archive"])
-                futures["extractor"] = pool.submit(self._data_extractor_agent, claim, domain, plan["extractor"])
-            elif claim_type == "statistical":
-                futures["archive"] = pool.submit(self._archive_hunter_agent, claim, domain, plan["archive"] + 1)
-                futures["extractor"] = pool.submit(self._data_extractor_agent, claim, domain, plan["extractor"] + 1)
-                futures["web"] = pool.submit(self._web_scout_agent, claim, domain, max(2, plan["web"] - 2))
-            else:
-                futures["web"] = pool.submit(self._web_scout_agent, claim, domain, plan["web"])
-                futures["archive"] = pool.submit(self._archive_hunter_agent, claim, domain, plan["archive"])
-                futures["extractor"] = pool.submit(self._data_extractor_agent, claim, domain, plan["extractor"])
-            out = {}
-            for name, fut in futures.items():
-                self._check_cancel()
-                try:
-                    out[name] = fut.result(timeout=max(4, timeout_s))
-                except Exception:
-                    out[name] = AgentReport(agent=f"{name.title()} Agent", summary="Timed out", confidence=20, findings=["Node timed out."], sources=[])
-                    self._trace(f"{name.title()} Agent", "timeout", "Timed out while gathering evidence.", 0, "async_router")
-            return out
+        if claim_type == "breaking_news":
+            node_plan = {
+                "web": lambda: self._web_scout_agent(claim, domain, plan["web"] + 2),
+                "archive": lambda: self._archive_hunter_agent(claim, domain, plan["archive"]),
+                "extractor": lambda: self._data_extractor_agent(claim, domain, plan["extractor"]),
+            }
+        elif claim_type == "statistical":
+            node_plan = {
+                "web": lambda: self._web_scout_agent(claim, domain, max(2, plan["web"] - 2)),
+                "archive": lambda: self._archive_hunter_agent(claim, domain, plan["archive"] + 1),
+                "extractor": lambda: self._data_extractor_agent(claim, domain, plan["extractor"] + 1),
+            }
+        else:
+            node_plan = {
+                "web": lambda: self._web_scout_agent(claim, domain, plan["web"]),
+                "archive": lambda: self._archive_hunter_agent(claim, domain, plan["archive"]),
+                "extractor": lambda: self._data_extractor_agent(claim, domain, plan["extractor"]),
+            }
+
+        def _run_node(fn: Callable[[], AgentReport], name: str) -> AgentReport:
+            self._check_cancel()
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(fn)
+                    return future.result(timeout=max(4, timeout_s))
+            except Exception:
+                self._trace(f"{name.title()} Agent", "timeout", "Timed out while gathering evidence.", 0, "langchain_parallel")
+                return AgentReport(
+                    agent=f"{name.title()} Agent",
+                    summary="Timed out",
+                    confidence=20,
+                    findings=["Node timed out."],
+                    sources=[],
+                )
+
+        parallel = RunnableParallel(
+            **{
+                name: RunnableLambda(lambda _input, fn=fn, node_name=name: _run_node(fn, node_name))
+                for name, fn in node_plan.items()
+            }
+        )
+        return parallel.invoke({})
 
     def _web_scout_agent(self, claim: str, domain: str, max_results: int = 8) -> AgentReport:
         query_claim = claim
@@ -826,7 +840,7 @@ class FactLensCrewWorkflow:
         return {
             "run_id": self.run_id,
             "session_id": self.session_id,
-            "framework": "CrewAI-compatible" if not self.crewai_available else "CrewAI",
+            "framework": "LangChain",
             "verdict": verdict,
             "confidence": confidence,
             "agent_reports": [report.to_dict() for report in agent_reports],

@@ -14,6 +14,37 @@ import re
 import urllib.request
 from typing import Any, Dict, List
 
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda
+
+
+def _prompt_value_to_text(value: Any) -> str:
+    if hasattr(value, "to_string"):
+        try:
+            return str(value.to_string())
+        except Exception:
+            pass
+    if hasattr(value, "to_messages"):
+        try:
+            messages = value.to_messages()
+            return "\n".join(
+                f"{getattr(msg, 'type', 'message')}: {getattr(msg, 'content', '')}"
+                for msg in messages
+            )
+        except Exception:
+            pass
+    return str(value)
+
+
+def _render_langchain_prompt(prompt: str, system_message: str) -> str:
+    chain = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_message),
+            ("human", "{prompt}"),
+        ]
+    ) | RunnableLambda(_prompt_value_to_text)
+    return chain.invoke({"prompt": prompt})
+
 
 def generate_gemini_json(prompt: str, model_env: str, default_model: str) -> Dict[str, Any]:
     if os.getenv("FACTLENS_FAST_MODE", "1").strip().lower() in {"1", "true", "yes", "on"}:
@@ -31,8 +62,9 @@ def generate_gemini_json(prompt: str, model_env: str, default_model: str) -> Dic
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(os.getenv(model_env, default_model))
         timeout_s = int(os.getenv("GEMINI_CALL_TIMEOUT_SECONDS", "20"))
+        rendered_prompt = _render_langchain_prompt(prompt, "Return only valid JSON. No markdown.")
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(model.generate_content, prompt)
+            future = pool.submit(model.generate_content, rendered_prompt)
             response = future.result(timeout=max(3, timeout_s))
         return _extract_json(getattr(response, "text", "") or "")
     except Exception:
@@ -52,6 +84,7 @@ def generate_featherless_json(
 
     base_url = os.getenv("FEATHERLESS_API_BASE", "https://api.featherless.ai/v1/chat/completions").strip()
     model = os.getenv(model_env, default_model).strip()
+    rendered_prompt = _render_langchain_prompt(prompt, "Return only valid JSON. No markdown.")
     payload = json.dumps(
         {
             "model": model,
@@ -60,7 +93,7 @@ def generate_featherless_json(
                     "role": "system",
                     "content": "Return only valid JSON. No markdown.",
                 },
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": rendered_prompt},
             ],
             "temperature": 0.2,
         }
